@@ -1,0 +1,32 @@
+# Track only ox source and configuration at the repository root.
+/*
+!/.gitignore
+!/AGENTS.md
+!/APPEND_SYSTEM.md
+!/agents/
+!/skills/
+!/extensions/
+!/settings.json
+!/npm/
+
+# Keep dependency manifests, not installed packages.
+/npm/*
+!/npm/.gitignore
+!/npm/package.json
+!/npm/package-lock.json
+node_modules/
+
+# Exclude credentials and generated files inside tracked directories too.
+auth.json
+models-store.json
+credentials.json
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://pi.dev/schemas/settings.schema.json",
+  "packages": [
+    "npm:gentle-engram@0.3.0",
+    "npm:pi-web-access",
+    "npm:pi-btw",
+    "npm:pi-subagents@0.79.0"
+  ],
+  "lastChangelogVersion": "1.4.0",
+  "defaultProvider": "openai",
+  "defaultModel": "gpt-6.1-sol",
+  "modelThinkingLevels": {
+    "openai/gpt-6-luna": "max",
+    "openai/gpt-6.1-sol": "high"
+  },
+  "enabledModels": [
+    "openai/gpt-6-luna",
+    "openai/gpt-6.1-sol",
+    "opencode-go/beam-free",
+    "opencode-go/deepseek-v4.1-flash",
+    "opencode-go/longcat-2.5-preview-free",
+    "opencode-go/minimax-m3.1-flash-free",
+    "opencode-go/muse-spark-1.3-contributor",
+    "opencode-go/mimo-v2.6-flash"
+  ],
+  "subagents": {
+    "disableBuiltins": true,
+    "agentOverrides": {
+      "ox-scout": {
+        "model": "opencode-go/mimo-v2.6-flash",
+        "thinking": "high"
+      },
+      "ox-researcher": {
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinking": "high"
+      },
+      "ox-worker": {
+        "model": "openai/gpt-6-luna",
+        "thinking": "max"
+      },
+      "ox-reviewer": {
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinking": "max"
+      }
+    }
+  }
+}

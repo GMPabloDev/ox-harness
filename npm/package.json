@@ -1,0 +1,10 @@
+{
+  "name": "pi-extensions",
+  "private": true,
+  "dependencies": {
+    "gentle-engram": "0.3.0",
+    "pi-btw": "^0.8.0",
+    "pi-subagents": "^0.79.0",
+    "pi-web-access": "^0.44.0"
+  }
+}

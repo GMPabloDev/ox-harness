@@ -1,0 +1,17 @@
+{
+  "name": "ox-worktrees",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:herdr": "OX_HERDR_SMOKE=1 node --test tests/live-herdr.smoke.mjs"
+  }
+}
