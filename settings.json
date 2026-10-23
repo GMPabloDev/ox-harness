@@ -1,5 +1,6 @@
 {
   "$schema": "https://pi.dev/schemas/settings.schema.json",
+  "theme": "tokyo-night",
   "packages": [
     "npm:gentle-engram@0.3.0",
     "npm:pi-web-access",
@@ -34,13 +35,9 @@
         "model": "opencode-go/deepseek-v4.1-flash",
         "thinking": "high"
       },
-      "ox-worker": {
-        "model": "openai/gpt-6-luna",
-        "thinking": "max"
-      },
       "ox-reviewer": {
         "model": "opencode-go/deepseek-v4.1-flash",
-        "thinking": "max"
+        "thinking": "high"
       }
     }
   }

@@ -29,4 +29,4 @@ Si faltan herramientas, acceso o documentación suficiente, conserva la limitaci
 
 Conserva la conclusión, el enlace o la ruta realmente consultada, la fecha de consulta y los límites de la evidencia. Asocia las fuentes con las decisiones que respaldan. Si no hubo investigación externa, no añadas enlaces supuestos ni afirmes que se verificó información actual.
 
-Un benchmark ajeno o un experimento pequeño no demuestra rendimiento en producción. Si la respuesta requiere ejecutar algo, propone un experimento aparte con `ox-prototype`. Esta investigación no autoriza escribir código, crear cuentas ni contratar servicios.
+Un benchmark ajeno o un experimento pequeño no demuestra rendimiento en producción. Si la respuesta requiere ejecutar algo, registra la evidencia que falta y conserva esa limitación. Esta investigación no autoriza ejecutar experimentos, escribir código, crear cuentas ni contratar servicios.

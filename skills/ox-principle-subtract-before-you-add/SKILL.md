@@ -1,25 +1,18 @@
 ---
 name: ox-principle-subtract-before-you-add
-description: Simplifica la parte afectada antes de ampliarla cuando exista código, validación o documentación demostrablemente redundante.
+description: "Apply when sequencing an addition, refactor, or rewrite. Remove dead code, redundant validators, and stub references first, then build on the simpler base."
 disable-model-invocation: true
-metadata:
-  source: https://github.com/cursor/plugins/blob/main/pstack/skills/principle-subtract-before-you-add/SKILL.md
 ---
 
-# Simplificar antes de ampliar
+# Subtract Before You Add
 
-Aplica este principio al ordenar una adición, un refactor o una reescritura sobre una base con complejidad innecesaria identificada. No exige una limpieza general antes de cada tarea.
+When evolving a system, remove complexity first, then build. Default to subtraction.
 
-## Comprobar qué sobra
+Make simplification a continual investment. Leave the design slightly simpler and more capable behind the same or smaller surface than you found it.
 
-- Verifica los consumidores, los contratos y los efectos antes de considerar una pieza muerta o redundante. La ausencia de una referencia evidente no prueba que se pueda borrar.
-- Elimina código sin uso y responsabilidades duplicadas dentro del alcance autorizado. Conserva validaciones y guardas que protejan entradas externas, seguridad o estados legítimos, aunque una SPEC no las enumere.
-- Diseña para el uso conocido y las garantías requeridas. Añade validadores, parsers y opciones cuando exista una necesidad concreta, no para escenarios imaginados.
-- Simplifica prompts y documentos quitando instrucciones repetidas y plantillas sin utilidad. Sustituye la repetición por referencias con disparadores claros cuando el agente pueda leerlas. Conserva el contexto necesario para cada encargo aislado.
-- Cuando una referencia ya no aporte contenido propio, elimina el archivo y corrige sus enlaces y consumidores. Conserva los documentos que sigan teniendo una función operativa.
-
-## Ordenar la simplificación
-
-Retira primero lo innecesario cuando puedas verificar esa retirada por separado. Si quitar y construir deben ocurrir juntos para conservar un estado coherente, entrégalos como un incremento verificable.
-
-Mantén las pruebas afectadas en GREEN. Una limpieza ajena al requisito se propone aparte; un bug localizado no autoriza reorganizar el módulo. El resultado debe reducir complejidad sin perder comportamiento requerido ni ampliar los permisos de la fase activa.
+- Sequence removal before construction
+- Cut before you polish (get to the minimum before investing in quality)
+- Design for observed usage, not speculative edge cases
+- No speculative validators, parsers, or guards beyond what the spec demands
+- Simplify prompts (remove redundant instructions, excessive templates)
+- When a reference has no novel content, delete it rather than leaving a stub

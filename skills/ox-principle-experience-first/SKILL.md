@@ -1,25 +1,19 @@
 ---
 name: ox-principle-experience-first
-description: Compara decisiones de producto, interacción y alcance por el resultado que recibe quien usa o mantiene el trabajo.
+description: "Apply when product, UX, or feature-scope tradeoffs come up. Choose user delight over implementation convenience; ship fewer polished features over more rough ones."
 disable-model-invocation: true
-metadata:
-  source: https://github.com/cursor/plugins/blob/main/pstack/skills/principle-experience-first/SKILL.md
 ---
 
-# Elegir por la experiencia del consumidor
+# Experience First
 
-Aplica este principio ante decisiones de producto, UX, alcance o ergonomía de una API. El consumidor puede ser el usuario final, quien importa una biblioteca, quien ejecuta una CLI o el siguiente mantenedor.
+When implementation convenience conflicts with user delight, choose delight.
 
-## Comparar el resultado
+- Every feature, control, and option must be justified
+- Ship less, ship better (polished experience with three features beats rough one with ten)
+- Prototype before committing (design decisions are cheaper in throwaway HTML than production code)
+- Get the details right (transitions, alignment, spacing, feedback, error states)
+- Tighten the core loop (every feature should serve the central workflow or get out of the way)
 
-- Identifica quién usa el trabajo, qué tarea necesita completar y qué resultado espera. Compara las alternativas desde esa tarea, no desde la comodidad de implementarlas.
-- Justifica cada capacidad, control y opción. Propón reducir alcance cuando eso permita resolver mejor el recorrido principal. Conserva los requisitos acordados hasta que el usuario apruebe cambiarlos.
-- Considera el recorrido completo y los detalles que lo afectan, como respuesta a las acciones, estados de error, recuperación, foco y accesibilidad. En una API, incluye el significado de entradas, resultados y errores.
-- Si ya estás ejecutando [ox-prototype](../ox-prototype/SKILL.md), usa ese experimento para comparar las alternativas. Si la decisión necesita observar una interacción o un comportamiento y no hay un experimento autorizado, propón uno acotado y espera autorización.
-- Distingue lo observado de tu juicio de diseño. Una preferencia o una captura no demuestra una mejora de usabilidad, conversión o rendimiento.
+The user is whoever consumes the work. For a UI that is the end user. For a library or an internal API it is the colleague who imports it. The engineer who maintains the code next is a user too. Weigh their experience the same way, and explain impact from their perspective.
 
-## Ajustar la calidad a la entrega
-
-En producción, prioriza un recorrido principal bien resuelto frente a capacidades adicionales incompletas. En un prototipo, construye solo el detalle que permita evaluar la decisión; el acabado del producto pertenece a la implementación posterior.
-
-Valora las alternativas dentro del presupuesto, el alcance y las garantías de seguridad y accesibilidad acordados. Foundational Thinking orienta la representación y el orden del trabajo. Este principio orienta el resultado que esas decisiones deben servir.
+Foundations should serve the experience. Foundational thinking governs the *sequence* of work. This principle governs the *target*.

@@ -1,24 +1,18 @@
 ---
 name: ox-spec
-description: Define especificaciones técnicas antes de implementar funcionalidades o cambios relevantes. Usa /skill:ox-spec con una descripción del cambio para revisar el contexto, resolver dudas necesarias y guardar directamente una SPEC completa en specs/.
+description: Define especificaciones técnicas antes de implementar funcionalidades o cambios relevantes.
 disable-model-invocation: true
 ---
 
 # /skill:ox-spec
 
-Define el cambio y guarda su especificación. No implementes código durante este comando. Acepta `--worktree` para una carpeta aislada y `--here` para una carpeta secuencial limpia. Sin opción, el modo automático conserva el flujo sencillo y aísla una SPEC adicional sin cambiar la carpeta de la anterior.
-
-## Filosofía
-
-Lento en la definición, rápido en la escritura. Dedica el tiempo necesario a entender el problema y resolver ambigüedades que cambien el resultado. Cuando la definición sea suficiente, escribe el archivo completo directamente. El usuario lo revisa después y solicita ajustes sobre ese mismo archivo.
-
-No muestres un borrador en el chat, no solicites aprobación por secciones y no pidas permiso para guardar. Si falta una decisión importante, pregunta por esa decisión y continúa después de resolverla.
+Define el cambio y guarda su especificación en una rama propia. Trabaja en la carpeta actual del repositorio. No implementes código durante este comando.
 
 ## 1. Entender el contexto
 
-1. Lee completos [template.md](template.md), [workflow.md](workflow.md) y [worktrees.md](worktrees.md), junto a esta skill. El template define la estructura de la SPEC. El workflow fija las reglas compartidas. La guía de worktrees define cómo preparar y retomar su carpeta sin comandos manuales del usuario.
-2. Lee las instrucciones aplicables del repositorio, incluidos los archivos `AGENTS.md`. Consulta la documentación y la memoria del proyecto disponibles, como `README.md`, `CLAUDE.md` o `GEMINI.md`, sin sustituir instrucciones aplicables por el primer archivo encontrado. Si existe `docs/foundation.md`, o el documento de fundamentos indicado por el proyecto, léelo completo. Su ausencia no bloquea el flujo ni obliga a ejecutar `ox-foundation`.
-3. Inspecciona `specs/` y su numeración actual. Lee las dos SPECs más recientes, si existen, y las que definan contratos afectados o dependencias. Consulta sus commits de `Evidencia` cuando necesites aclarar un contrato, una decisión o un cambio previo. Revisa el código y la configuración relevantes para comprobar el estado actual.
+1. Lee completo [template.md](template.md), junto a esta skill. El template define la estructura de la SPEC.
+2. Lee las instrucciones aplicables del repositorio, incluidos los archivos `AGENTS.md`. Consulta la documentación y la memoria del proyecto disponibles, como `README.md`. Si existe `docs/foundation.md`, o el documento de fundamentos indicado por el proyecto, léelo completo. Su ausencia no bloquea el flujo.
+3. Inspecciona `specs/` y su numeración actual. Lee las dos SPECs relacionadas, si existen, y las que definan contratos afectados o dependencias. Consulta sus commits de `Evidencia` cuando necesites aclarar un contrato, una decisión o un cambio previo. Revisa el código y la configuración relevantes para comprobar el estado actual.
 4. Obtén la fecha actual mediante las herramientas del entorno. No deduzcas la fecha a partir de otras SPECs.
 5. Usa los argumentos o la conversación como descripción inicial. Si no hay una petición identificable, pregunta qué se quiere construir o cambiar. Un argumento que sea solo un slug kebab-case sirve también como nombre propuesto.
 
@@ -35,7 +29,7 @@ Lee completos solo los principios pertinentes a las decisiones abiertas:
 - [Redesign from First Principles](../ox-principle-redesign-from-first-principles/SKILL.md) cuando el requisito cuestione las responsabilidades o invariantes del diseño existente.
 - [Subtract Before You Add](../ox-principle-subtract-before-you-add/SKILL.md) cuando el plan deba retirar complejidad innecesaria identificada antes de construir.
 
-Si una elección necesita observar comportamiento o comparar interacciones, propone un experimento acotado con [ox-prototype](../ox-prototype/SKILL.md). Espera autorización para ejecutarlo y conserva la decisión pendiente hasta tener evidencia suficiente.
+Resuelve las dudas con estas reglas:
 
 - Pregunta solo por ambigüedades que cambien el alcance, el comportamiento, los contratos, la compatibilidad o las garantías de seguridad. Agrupa las dudas relacionadas en un bloque breve, de hasta cinco preguntas, y espera la respuesta.
 - Ofrece opciones concretas cuando ayuden. Indica la recomendación y su motivo. Usa una herramienta de preguntas si está disponible o una lista numerada si no lo está.
@@ -49,11 +43,14 @@ Si la petición ya está definida, continúa directamente. Si el usuario pide gu
 
 ## 3. Preparar la rama de la SPEC
 
-1. Comprueba Git, la rama local `dev` y los cambios existentes según [workflow.md](workflow.md). Identifica la raíz del repositorio. Resuelve cualquier impedimento antes de escribir archivos.
-2. Para una SPEC nueva, deriva un slug ASCII kebab-case breve y llama a `ox_worktree` con `action: "prepare"`, `slug` y el modo indicado en [worktrees.md](worktrees.md). La herramienta reserva el número entre sesiones y prepara desde `dev` la rama `spec-NN-slug` y su carpeta antes de guardar el documento. Usa `number: 0` solo si el usuario pidió fundamentos con `00`.
-3. Para editar o retomar una SPEC existente, usa `prepare` con `spec` en lugar de `slug`. Reutiliza la rama y el checkout encontrados, incluidos los cambios sin commit. Si falta su rama, explica el impedimento y pide prepararla sin trasladar trabajo de otra SPEC.
-4. Conserva `spec`, `branch`, `cwd`, `specPath` y `repositoryRoot` devueltos. Usa ese `cwd` explícitamente en comandos y rutas, aunque la sesión haya empezado en otra carpeta. No actives esa rama en el checkout de otra SPEC.
-5. Confirma la rama en el `cwd` preparado. Revisa allí la SPEC existente, los fundamentos disponibles, las instrucciones, el código y los contratos afectados. Resuelve cualquier diferencia con el contexto inicial antes de redactar.
+1. Identifica la raíz del repositorio y úsala en comandos y rutas. Comprueba que Git tenga al menos un commit y una rama local `main`. Si falta esa preparación, detente antes de escribir y pide resolverla. No inicialices Git ni elijas otra base por tu cuenta.
+2. Consulta `git status`, la rama activa, el índice y los cambios existentes. Una operación de merge, rebase, cherry-pick o revert pendiente impide continuar. No la completes ni la abortes por tu cuenta. Antes de cambiar de rama, comprueba que no haya otros agentes o comandos activos en esta carpeta. Exige el índice y el directorio de trabajo limpios. Conserva los cambios existentes y no hagas stash, descartes ni reescribas historia para continuar.
+3. Para una SPEC nueva, deriva un slug ASCII kebab-case breve. Consulta la numeración de `specs/` y las ramas locales `spec-*`, incluidos los documentos que solo existan en esas ramas. Usa el siguiente número después del mayor existente, con al menos dos cifras. Reserva `00` solo si el usuario lo pidió. Comprueba que ni el número ni el nombre correspondan a otra SPEC.
+4. Crea y activa `spec-NN-slug` desde `main` con `git switch -c spec-NN-slug main` antes de guardar la SPEC. Sustituye `NN-slug` por la referencia elegida. Si la rama ya existe, comprueba si se está retomando una SPEC o hay una colisión. No la recrees ni actualices su base automáticamente.
+5. Para editar o retomar una SPEC existente, identifica su rama y usa `git switch spec-NN-slug` si no está activa y la carpeta está limpia. Si ya estás en ella, conserva los cambios sin commit que pertenezcan a esa SPEC. Ante cambios ajenos o una rama ausente, detente y pide resolverlo sin trasladar trabajo de otra SPEC.
+6. Confirma la rama antes de editar. Guarda la SPEC solo en `spec-NN-slug`, nunca directamente en `main`. Relee desde esa rama las instrucciones, la SPEC existente, los fundamentos disponibles y los contratos afectados. Resuelve cualquier diferencia con el contexto inicial.
+
+Crear o activar una rama no hace un commit ni publica cambios. Esta skill no autoriza commits, push, merge ni despliegue.
 
 ## 4. Escribir y verificar la SPEC
 
@@ -69,13 +66,12 @@ Redacta el documento completo siguiendo [template.md](template.md). Conserva el 
 
 ## 5. Guardar directamente
 
-1. Con la rama de la SPEC comprobada en su `cwd`, vuelve a comprobar que `specPath` esté libre si la SPEC es nueva. Si se ocupó, detente y resuelve la colisión sin sobrescribirlo ni escribir en otra rama.
-2. Guarda directamente en el `specPath` devuelto, que termina en `specs/NN-slug.md`. Actualiza un archivo existente solo cuando el usuario haya pedido editar o retomar esa SPEC.
+1. Con la rama de la SPEC comprobada, vuelve a comprobar que `specs/NN-slug.md` esté libre si la SPEC es nueva. Si se ocupó, detente y resuelve la colisión sin sobrescribirlo ni escribir en otra rama.
+2. Guarda directamente en `specs/NN-slug.md` desde la raíz del repositorio. Crea `specs/` si falta. Actualiza un archivo existente solo cuando el usuario haya pedido editar o retomar esa SPEC.
 3. Usa el estado inicial `Borrador`, o su equivalente en el idioma y las convenciones del proyecto. Guardar el archivo no lo convierte en aprobado ni autoriza su implementación. Al editar una SPEC existente, conserva su estado salvo indicación del usuario. Consulta cualquier cambio de requisitos que no esté acordado.
 4. Completa la fecha y las relaciones `Depende de`, `Modifica` y `Reemplaza` según el template. Al editar una SPEC existente, conserva su fecha salvo indicación contraria del usuario o del proyecto. No alteres otras SPECs ni su vigencia automáticamente.
 5. Revisa el archivo guardado para detectar secciones incompletas, referencias rotas o contradicciones. Corrígelas antes de terminar.
-6. Guarda en Engram el resumen de creación o revisión relevante según [workflow.md](workflow.md). Registra el estado del archivo sin asumir aprobación. Si tienes que detenerte por un bloqueo, registra también el impedimento con la información disponible.
-7. Si la carpeta difiere de la de esta sesión, abre su Pi en Herdr con `ox_worktree`, `action: "open"` y `spec`, sin `task`, según [worktrees.md](worktrees.md). No inicies implementación. Si la apertura falla, conserva el archivo y comunica la ruta y el error real.
-8. Confirma la ruta, el estado, la rama, la carpeta y el workspace cuando exista. Indica cómo retomarla con `/ox-worktree`. Una vez aprobada, el siguiente comando es `/skill:ox-spec-impl NN-slug`, que continúa en esa misma rama y carpeta.
+6. Guarda en Engram el resumen de creación o revisión relevante con `topic_key: "spec/NN-slug/status"`. Comprueba el proyecto con `mem_current_project` usando la raíz del repositorio como `cwd` y conserva esa raíz en los guardados. Incluye objetivo, ruta, estado leído, rama, decisiones y siguiente paso. No asumas aprobación. Registra también los bloqueos. Si la memoria falla, conserva el archivo e informa sin bloquear la entrega ni afirmar que el guardado tuvo éxito.
+7. Confirma la ruta, el estado y la rama. Una vez aprobada, el siguiente comando es `/skill:ox-spec-impl NN-slug`, que continúa en esa misma rama y carpeta.
 
 Termina al guardar y comunicar el resultado. La preparación de la rama forma parte de este comando. No instales dependencias, cambies código ni inicies la implementación desde `/skill:ox-spec`.

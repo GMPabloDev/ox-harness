@@ -1,30 +1,21 @@
 ---
 name: ox-principle-foundational-thinking
-description: Elige las estructuras de datos y la preparación técnica que permiten implementar el comportamiento requerido sin coordinación innecesaria.
+description: "Apply before writing logic: choosing core types and data structures, sequencing scaffold-vs-feature work, asking what concurrent actors share. Get the data structures right so downstream code becomes obvious."
 disable-model-invocation: true
-metadata:
-  source: https://github.com/cursor/plugins/blob/main/pstack/skills/principle-foundational-thinking/SKILL.md
 ---
 
-# Elegir los datos antes de la lógica
+# Foundational Thinking
 
-Aplica este principio antes de escribir lógica que necesite nuevos tipos, estructuras de datos o estado compartido. Úsalo también para ordenar la preparación técnica y las capacidades que dependen de ella.
+**Structural decisions** protect option value. **Code-level decisions** protect simplicity.
 
-## Representar el comportamiento
+**Data structures first.** Get the data shape right before writing logic. Define core types early, trace every access pattern, and choose structures that match the dominant paths.
 
-- Identifica los datos, las invariantes y las operaciones que necesita el contrato actual. Elige estructuras que faciliten sus consultas y actualizaciones habituales.
-- Define los tipos centrales antes de implementar las reglas que los usan. Mantén una representación coherente entre componentes en vez de repetir supuestos mediante condiciones dispersas.
-- Reutiliza estructuras existentes que sigan representando el problema. La similitud entre unas líneas no obliga a extraer una abstracción.
-- Antes de compartir estado, comprueba qué ocurre si otro actor lo modifica durante la operación. Prefiere datos y destinos independientes cuando esa modificación pueda afectar al resultado. Si el recurso debe compartirse, define cómo conservar sus invariantes.
+At code level, DRY the structure, not every line. Types and data models should converge. Three similar statements still beat a premature abstraction. Prefer explicit over clever. Test behavior and edge cases, not line counts.
 
-## Preparar lo que necesita la siguiente entrega
+**Concurrency corollary.** Before sharing state between actors, ask "what happens if another actor modifies this concurrently?" If not "nothing", isolate.
 
-Reutiliza las herramientas del proyecto y prepara lo que necesitan las entregas previstas, como el runner de pruebas, los tipos compartidos o las comprobaciones de integración. Evita infraestructura para capacidades hipotéticas.
+**Scaffold first.** If something helps every later phase, do it first. Ask "does every subsequent phase benefit from this existing?" CI, linting, test infrastructure, and shared types are scaffold. Sequence for option value: setup before features, tests before fixes. Keep commits small and single-purpose.
 
-Si la base afectada contiene código muerto o responsabilidades redundantes, lee completo [Subtract Before You Add](../ox-principle-subtract-before-you-add/SKILL.md) antes de ordenar esa simplificación y la construcción.
+Each increment should land a coherent abstraction or deepen one that exists. Do not spread a new capability across callers as special-case coordination.
 
-Cada incremento debe dejar una capacidad coherente y verificable. Conserva el orden de pruebas e implementación de la guía TDD activa.
-
-## Mantener el nivel de detalle
-
-Este principio no exige ejecutar `ox-foundation` ni diseñar todo el sistema antes de empezar. Los acuerdos globales pertenecen a los fundamentos disponibles. La SPEC fija las reglas de datos y contratos necesarias. Los tipos y estructuras internos reversibles se resuelven durante la implementación.
+Subtraction comes before scaffolding. Remove dead code first, then lay foundations.

@@ -50,7 +50,7 @@ Al plantear las decisiones, aplica estas reglas:
 - Presenta recomendaciones no aceptadas como propuestas. La falta de respuesta no equivale a aprobación. Un cambio de un acuerdo existente requiere una petición o elección del usuario que lo autorice.
 - Muestra una estructura de carpetas cuando ayude a elegir. Etiquétala como propuesta y explica los límites entre sus partes. Sigue las convenciones del framework y evita carpetas o abstracciones para capacidades hipotéticas.
 
-Si una decisión necesita datos externos, lee y aplica [research.md](research.md) antes de investigar. Si necesita un experimento, propone una tarea acotada con [ox-prototype](../ox-prototype/SKILL.md) y espera autorización para ejecutarla. Conserva la decisión como pendiente hasta tener evidencia o una elección suficiente. No conviertas esta fase en implementación.
+Si una decisión necesita datos externos, lee y aplica [research.md](research.md) antes de investigar. Si falta evidencia experimental, registra qué falta y conserva la decisión pendiente hasta tener evidencia o una elección suficiente. No ejecutes experimentos ni conviertas esta fase en implementación.
 
 ## 3. Comprobar si se puede pasar a una SPEC
 
