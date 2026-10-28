@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Container, Text, TuiMainScreen, visibleWidth } from "@earendil-works/pi-tui";
 import { FocusView, findChat } from "../view.ts";
+import { agentColor, subagentCards } from "../cards.ts";
 import { activityLabel, cleanLine, customActivity, toolHasError, toolPolicy, withoutThinking } from "../policy.ts";
 import { loadPreference, savePreference } from "../preferences.ts";
 import { installFocus } from "../index.ts";
@@ -17,6 +18,7 @@ const { AssistantMessageComponent } = await import(`${components}/assistant-mess
 const { ToolExecutionComponent } = await import(`${components}/tool-execution.js`);
 const { UserMessageComponent } = await import(`${components}/user-message.js`);
 const { CustomMessageComponent } = await import(`${components}/custom-message.js`);
+const { SkillInvocationMessageComponent } = await import(`${components}/skill-invocation-message.js`);
 const plain = (lines: string[]) => lines.join("\n").replace(/\x1b\[[0-9;]*m/g, "").replace(/\x1b\][^\x07]*\x07/g, "");
 let time = 1;
 const message = (text = "FINAL_VISIBLE", tool = false, stopReason = tool ? "toolUse" : "stop") => ({
@@ -92,6 +94,35 @@ describe("visual policy", () => {
 		expect(toolPolicy("subagent")).toBe("subagent");
 		expect(toolPolicy("request_permission")).toBe("native");
 		expect(toolPolicy("ask_user")).toBe("native");
+	});
+	test("recognizes only skill-file reads and uses the declared name without exposing instructions", () => {
+		expect(toolPolicy("read", { path: "/skills/folder-name/SKILL.md" })).toBe("skill");
+		expect(toolPolicy("read", { path: "skills/folder-name/notes.md" })).toBe("hidden");
+		expect(toolPolicy("read", { path: "skills/SKILL.md.backup" })).toBe("hidden");
+		expect(toolPolicy("write", { path: "/skills/folder-name/SKILL.md" })).toBe("hidden");
+		expect(activityLabel("skill", "read", { path: "/skills/folder-name/SKILL.md" }, {
+			result: { content: [{ type: "text", text: '---\nname: "declared-skill"\ndescription: private description\n---\nSKILL_BODY_SECRET' }] },
+		})).toBe("Skill cargada · declared-skill");
+		expect(activityLabel("skill", "read", { path: "/skills/folder-name/SKILL.md" }, { pending: true })).toBe("Cargando skill · folder-name");
+	});
+	test("falls back to the skill directory for partial reads, missing or invalid frontmatter", () => {
+		for (const text of ["SKILL_BODY_SECRET", "---\nname: [broken\n---\nSKILL_BODY_SECRET"]) {
+			expect(activityLabel("skill", "read", { path: "skills/folder-name/SKILL.md" }, {
+				result: { content: [{ type: "text", text }] },
+			})).toBe("Skill cargada · folder-name");
+		}
+		expect(activityLabel("skill", "read", { path: "skills/folder-name/SKILL.md", offset: 20 }, {
+			result: { content: [{ type: "text", text: "---\nname: not-the-frontmatter\n---" }] },
+		})).toBe("Skill cargada · folder-name");
+		expect(activityLabel("skill", "read", { path: "C:\\skills\\windows-skill\\SKILL.md" })).toBe("Skill cargada · windows-skill");
+	});
+	test("refreshes a cached skill name if the result text changes", () => {
+		const args = { path: "/skills/folder-name/SKILL.md" };
+		const result = { content: [{ type: "text", text: "---\nname: first-name\n---\nSKILL_BODY_SECRET" }] };
+		expect(activityLabel("skill", "read", args, { result })).toBe("Skill cargada · first-name");
+		expect(activityLabel("skill", "read", args, { result })).toBe("Skill cargada · first-name");
+		result.content[0].text = "---\nname: second-name\n---\nSKILL_BODY_SECRET";
+		expect(activityLabel("skill", "read", args, { result })).toBe("Skill cargada · second-name");
 	});
 	test("sanitizes summary text and supports batched web requests", () => {
 		expect(cleanLine("hola\x1b[2J\r\n\u202emundo")).toBe("hola mundo");
@@ -186,6 +217,60 @@ describe("real Pi components", () => {
 		expect(plain(h.tui.render(100))).toContain("EDITOR_AND_PERMISSIONS");
 		expect(h.tui.getFocusedComponent()).toBe(h.editor);
 	});
+	test("shows a skill loading and then its declared name, with its content and history unchanged", () => {
+		const h = view(); h.focus.busy = true;
+		const args = { path: "/skills/folder-name/SKILL.md" };
+		const component = new ToolExecutionComponent("read", "skill-read", args, {}, undefined, { requestRender() {} });
+		h.chat.addChild(component);
+		expect(h.text()).toContain("Cargando skill · folder-name");
+		expect(h.text()).not.toContain("Skill cargada");
+		const result = { content: [{ type: "text", text: "---\nname: declared-skill\ndescription: private\n---\nSKILL_BODY_SECRET" }], isError: false };
+		const snapshot = JSON.stringify(result);
+		component.updateResult(result, false);
+		expect(h.text()).toContain("Skill cargada · declared-skill");
+		expect(h.text()).not.toContain("SKILL_BODY_SECRET");
+		expect(h.text()).not.toContain("description: private");
+		expect(JSON.stringify(result)).toBe(snapshot);
+		h.focus.enabled = false;
+		component.setExpanded(true);
+		expect(h.text()).toContain("SKILL_BODY_SECRET");
+	});
+	test("skill read errors remain native and never appear as loaded", () => {
+		const h = view();
+		h.chat.addChild(tool("read", { path: "/skills/missing-skill/SKILL.md" }, true));
+		expect(h.text()).toContain("IMPORTANT_TOOL_ERROR");
+		expect(h.text()).not.toContain("Skill cargada");
+	});
+	test("keeps explicit skill invocations compact even when native output is expanded", () => {
+		const h = view();
+		const invocation = new SkillInvocationMessageComponent({ name: "manual-skill", content: "MANUAL_SKILL_BODY_SECRET" });
+		invocation.setExpanded(true);
+		h.chat.addChild(invocation);
+		h.chat.addChild(assistant());
+		expect(h.text()).toContain("Skill cargada · manual-skill");
+		expect(h.text()).not.toContain("MANUAL_SKILL_BODY_SECRET");
+		expect(h.text()).toContain("FINAL_VISIBLE");
+		h.focus.enabled = false;
+		expect(h.text()).toContain("MANUAL_SKILL_BODY_SECRET");
+	});
+	test("shows nested skill reads live and from resumed metadata without showing the parent result", () => {
+		const h = view();
+		const parent = tool("codemode");
+		h.chat.addChild(parent);
+		h.focus.nestedStart("codemode-id", "skill-nested", "read", { path: "/skills/nested-skill/SKILL.md" });
+		expect(h.text()).toContain("Cargando skill · nested-skill");
+		h.focus.nestedEnd("codemode-id", "skill-nested", false);
+		expect(h.text()).toContain("Skill cargada · nested-skill");
+		expect(h.text()).not.toContain("INTERNAL_TOOL_RESULT");
+		h.focus.dispose();
+		const restored = new FocusView(h.chat, () => themes.theme);
+		parent.updateResult({ content: [{ type: "text", text: "SKILL_BODY_SECRET" }], nestedCalls: { complete: true, calls: [
+			{ name: "read", arguments: { path: "/skills/resumed-skill/SKILL.md" }, status: "ok" },
+		] } }, false);
+		expect(h.text()).toContain("Skill cargada · resumed-skill");
+		expect(h.text()).not.toContain("SKILL_BODY_SECRET");
+		restored.dispose();
+	});
 	test("compacts web, memory and subagents, preserving task names and hiding result bodies", () => {
 		const h = view();
 		h.chat.addChild(tool("web_search", { query: "Pi documentation" }));
@@ -261,13 +346,14 @@ describe("real Pi components", () => {
 	test("does not alter layout roots or the task sidebar and cleans up after transcript rebuilds", () => {
 		const h = native();
 		const panel = new TodoPanel(() => themes.theme);
+		panel.setState({ version: 1, title: "Plan de trabajo", todos: [{ id: "1", content: "Prueba", status: "pending" }] });
 		const sidebar = mountSidebar(h.tui, panel);
 		expect(findChat(h.tui)).toBe(h.chat);
 		const focus = new FocusView(h.chat, () => themes.theme);
 		const answer = assistant();
 		const original = answer.render;
 		h.chat.addChild(answer);
-		expect(plain(h.tui.render(160))).toContain("TAREAS");
+		expect(plain(h.tui.render(160))).toContain("Plan de trabajo");
 		expect(plain(h.tui.render(160))).toContain("FINAL_VISIBLE");
 		h.chat.clear(); h.chat.render(100);
 		expect(answer.render).toBe(original);
@@ -351,4 +437,122 @@ describe("preferences and lifecycle", () => {
 			expect(plain(h.chat.render(100))).toContain("THINKING_SECRET");
 		}
 	}));
+});
+
+describe("subagent cards", () => {
+	const runDir = (status: unknown) => {
+		const folder = mkdtempSync(join(tmpdir(), "focus-run-"));
+		writeFileSync(join(folder, "status.json"), JSON.stringify(status));
+		return folder;
+	};
+	const running = {
+		state: "running", startedAt: 1_000, lastUpdate: 5_400,
+		steps: [{
+			agent: "ox-researcher", status: "running", model: "opencode-go/gpt-5.6-luna", thinking: "high",
+			description: "Buscar la versión publicada", startedAt: 1_000,
+			tokens: { window: 11_141, output: 3_489 }, totalCost: { costUsd: 0.00267 }, toolCount: 8,
+			recentTools: [{ tool: "fetch_content", args: "https://registry.npmjs.org/pkg" }],
+		}],
+	};
+	const launch = { agent: "ox-researcher", task: "Buscar la versión publicada" };
+	const render = (folder: string | undefined, input: unknown = launch, width = 110, now = 5_400) =>
+		plain(subagentCards(input, { content: [{ type: "text", text: "RUN_BODY_SECRET" }], details: folder ? { asyncId: "run-1", asyncDir: folder } : {} },
+			width, themes.theme, { now }).lines);
+
+	test("gives each agent a stable color of its own", () => {
+		const scout = agentColor("ox-scout", themes.theme);
+		expect(agentColor("ox-scout", themes.theme)).toEqual(scout);
+		expect(agentColor("ox-researcher", themes.theme)).not.toEqual(scout);
+		expect(agentColor("ox-reviewer", themes.theme)).not.toEqual(agentColor("ox-researcher", themes.theme));
+	});
+	test("uses exact theme colors instead of interpolated agent shades", () => {
+		expect(agentColor("ox-scout", themes.theme)).toEqual(themes.theme.colors.toolDiffAdded);
+		expect(agentColor("ox-researcher", themes.theme)).toEqual(themes.theme.colors.mdLink);
+		expect(agentColor("ox-reviewer", themes.theme)).toEqual(themes.theme.colors.syntaxFunction);
+		const colors = Object.values(themes.theme.colors);
+		for (const name of ["custom-a", "custom-b", "custom-c"]) expect(colors).toContainEqual(agentColor(name, themes.theme));
+	});
+	test("leaves inner space above, below and beside the card content", () => {
+		const lines = subagentCards(launch, {}, 80, themes.theme).lines;
+		const card = lines.filter(line => line.length > 0).map(line => plain([line]));
+		expect(card[0].trim()).toBe("▌");
+		expect(card.at(-1)!.trim()).toBe("▌");
+		for (const line of card) {
+			expect(visibleWidth(line)).toBe(80);
+			expect(line.startsWith("▌  ")).toBe(true);
+			expect(line.endsWith("  ")).toBe(true);
+		}
+		expect(card[1]).toContain("ox-researcher");
+	});
+	test("shows state, elapsed time, model, tokens, cost and the page being read", () => {
+		const text = render(runDir(running));
+		for (const expected of ["ox-researcher", "en marcha", "4s", "gpt-5.6-luna", "high", "ctx 11.1k", "out 3.5k", "$0.0027", "8 tools",
+			"fetch_content", "https://registry.npmjs.org/pkg", "Buscar la versión publicada"]) expect(text).toContain(expected);
+		expect(text).not.toContain("RUN_BODY_SECRET");
+	});
+	test("marks a finished run and reports the run duration instead of the clock", () => {
+		const folder = runDir({ ...running, state: "complete", steps: [{ ...running.steps[0], status: "complete", endedAt: 61_000 }] });
+		const card = subagentCards(launch, { details: { asyncId: "run-1", asyncDir: folder } }, 110, themes.theme, { now: 999_000 });
+		expect(card.running).toBe(false);
+		expect(plain(card.lines)).toContain("completado");
+		expect(plain(card.lines)).toContain("1m00s");
+	});
+	test("keeps memory bodies and shell arguments off the card", () => {
+		const folder = runDir({ ...running, steps: [{ ...running.steps[0], recentTools: [{ tool: "mem_save", args: "PRIVATE_MEMORY_BODY" }] }] });
+		const memory = render(folder);
+		expect(memory).toContain("mem_save");
+		expect(memory).not.toContain("PRIVATE_MEMORY_BODY");
+		const shell = render(runDir({ ...running, steps: [{ ...running.steps[0], recentTools: [{ tool: "bash", args: "TOKEN=secret npm publish" }] }] }));
+		expect(shell).toContain("bash");
+		expect(shell).not.toContain("secret");
+	});
+	test("fits every card line to the width and keeps narrow widths legible", () => {
+		const folder = runDir(running);
+		for (const width of [8, 12, 24, 40, 80, 160]) {
+			const lines = subagentCards(launch, { details: { asyncId: "run-1", asyncDir: folder } }, width, themes.theme, { now: 5_400 }).lines;
+			for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+			expect(plain(lines)).toContain(width >= 24 ? "ox-researcher" : "ox-");
+		}
+	});
+	test("prefers the launch task over the redacted status description", () => {
+		const redacted = runDir({ ...running, steps: [{ ...running.steps[0], description: "[prompt redacted]" }] });
+		const text = render(redacted, { agent: "ox-researcher", task: "Tarea real del encargo" });
+		expect(text).toContain("Tarea real del encargo");
+		expect(text).not.toContain("[prompt redacted]");
+		expect(render(redacted, { agent: "ox-researcher" })).not.toContain("[prompt redacted]");
+	});
+	test("takes each parallel task from the launch arguments", () => {
+		const folder = runDir({ ...running, steps: [
+			{ ...running.steps[0], agent: "ox-scout", description: "[prompt redacted]" },
+			{ ...running.steps[0], agent: "ox-researcher", description: "[prompt redacted]" },
+		] });
+		const text = render(folder, { workflow: "parallel", tasks: [{ agent: "ox-scout", task: "Explorar el código" }, { agent: "ox-researcher", task: "Buscar la versión" }] });
+		expect(text).toContain("Explorar el código");
+		expect(text).toContain("Buscar la versión");
+		expect(text).not.toContain("[prompt redacted]");
+	});
+	test("shows the agent and task before the run writes its status file", () => {
+		const text = render(undefined);
+		expect(text).toContain("ox-researcher");
+		expect(text).toContain("Buscar la versión publicada");
+		expect(text).toContain("en marcha");
+	});
+	test("uses foreground results when the run did not detach", () => {
+		const text = plain(subagentCards({ agent: "ox-scout", task: "Explorar" }, { details: { results: [{
+			agent: "ox-scout", task: "Explorar", status: "completed", exitCode: 0, model: "opencode-go/mimo-v2.6-flash",
+			usage: { window: 2_000, output: 100, cost: { total: 0.01 } }, toolCalls: [{ name: "read", args: "/repo/src/file.ts" }],
+		}] } }, 110, themes.theme).lines);
+		for (const expected of ["ox-scout", "completado", "mimo-v2.6-flash", "ctx 2k", "$0.010", "read", "/repo/src/file.ts"]) expect(text).toContain(expected);
+	});
+	test("renders the card inside the transcript and still hides the run body", () => {
+		const h = view();
+		const component = new ToolExecutionComponent("subagent", "subagent-id", launch, {}, undefined, { requestRender() {} });
+		h.chat.addChild(component);
+		component.updateResult({ content: [{ type: "text", text: "RUN_BODY_SECRET" }], details: { asyncId: "run-1", asyncDir: runDir(running) } }, false);
+		expect(h.text()).toContain("ox-researcher");
+		expect(h.text()).not.toContain("RUN_BODY_SECRET");
+		expect(h.text()).not.toContain("Subagentes");
+		h.focus.enabled = false;
+		expect(h.text()).toContain("RUN_BODY_SECRET");
+	});
 });

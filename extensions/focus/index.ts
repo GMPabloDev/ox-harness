@@ -41,7 +41,7 @@ export function installFocus(pi: ExtensionAPI, preferencePath: string) {
 			tui = current;
 			const chat = /^1\.4\./.test(VERSION) ? findChat(current) : undefined;
 			supported = !!chat;
-			if (chat) view = new FocusView(chat, () => ctx.ui.theme);
+			if (chat) view = new FocusView(chat, () => ctx.ui.theme, () => tui?.requestRender());
 			else if (!warned) {
 				warned = true;
 				ctx.ui.notify("Focus no reconoce esta versión de la interfaz de Pi. Se conserva la vista normal.", "warning");

@@ -23,6 +23,8 @@ La invocación autoriza comenzar según el modo elegido, una vez resueltas las c
 
 El agente principal implementa, ejecuta las comprobaciones por bloque, revisa sus cambios, corrige y registra el progreso. Puede consultar a `ox-scout` para una pregunta de código local o a `ox-researcher` para una pregunta externa cuando falte evidencia necesaria. La revisión final independiente corresponde a `ox-reviewer`, con contexto nuevo y sin edición, según [la guía de revisión](review.md). El principal conserva las decisiones y la aceptación. No añadas un verificador por bloque ni delegues la implementación por rutina.
 
+Lee el [selector común de principios](../ox-mode/principles.md) al preparar la siguiente acción, también al reanudar. Antes de diseñar, ejecutar, probar o declarar terminado un resultado, usa los activadores de esa decisión y lee completos solo los originales pertinentes. Reconsidera la selección si cambia el riesgo, sin añadir controles por archivo ni alterar los bloques aprobados.
+
 ## 1. Leer y comprobar
 
 1. Identifica la raíz Git y aplica las [reglas de ramas y commits](#reglas-de-ramas-y-commits) y de [memoria](#memoria-en-engram). Lee las instrucciones y localiza la rama `spec-NN-slug`. Si falta, pide prepararla antes de continuar. Lee la SPEC completa de esa rama. Si aún no está activa, consulta el archivo con `git show spec-NN-slug:specs/NN-slug.md`. Si ya estás en ella, incluye sus cambios sin commit. Lee los contratos afectados y los fundamentos disponibles, como `docs/foundation.md`. Reutiliza sus acuerdos vigentes, no sus propuestas sin aprobar. Su ausencia no bloquea el flujo. Usa las herramientas disponibles del agente y responde en el idioma del usuario.

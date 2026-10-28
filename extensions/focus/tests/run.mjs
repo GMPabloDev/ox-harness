@@ -11,7 +11,8 @@ try {
 	const copy = resolve(temp, "extensions/focus");
 	cpSync(root, copy, { recursive: true });
 	cpSync(resolve(root, "../todo-sidebar/core.ts"), resolve(temp, "extensions/todo-sidebar/core.ts"));
+	cpSync(resolve(root, "../tool-status"), resolve(temp, "extensions/tool-status"), { recursive: true });
 	symlinkSync(modules, resolve(temp, "node_modules"), "dir");
-	const result = spawnSync("bun", ["test", resolve(copy, "tests/focus.test.ts")], { stdio: "inherit" });
+	const result = spawnSync("bun", ["test", resolve(copy, "tests/focus.test.ts"), resolve(temp, "extensions/tool-status/tests/status.test.ts")], { stdio: "inherit" });
 	process.exitCode = result.status ?? 1;
 } finally { rmSync(temp, { recursive: true, force: true }); }

@@ -43,6 +43,8 @@ export default function fixture(pi: ExtensionAPI) {
 					await sleep(200);
 					addTool("read", { path: "fixture.txt" }, "read-ok");
 					addTool("read", { path: "missing-fixture.txt" }, "read-fail");
+					addTool("read", { path: "skills/fixture-folder/SKILL.md" }, "skill-read");
+					addTool("read", { path: "skills/missing-skill/SKILL.md" }, "skill-read-fail");
 					msg.stopReason = "toolUse";
 				} else if (current === 2) {
 					addText("text", "MORE_PROGRESS_SECRET");

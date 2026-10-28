@@ -65,11 +65,13 @@ def run(mode, temp):
     try:
         startup = drain(4)
         assert process.poll() is None, f"{mode}: Pi exited at startup"
-        assert "TAREAS" in startup, f"{mode}: sidebar absent"
+        assert "│" in startup, f"{mode}: sidebar absent"
+        assert "Proyecto" in startup and "Proveedor" in startup and "Modelo" in startup and "Contexto" in startup and "Coste estimado" in startup, f"{mode}: session data absent"
+        assert "TAREAS" not in startup, f"{mode}: old heading still visible"
         assert "Prueba real del sidebar" in startup, f"{mode}: persisted state absent"
         assert "\x1b[9m" in startup, f"{mode}: completed text not struck through"
         assert "Failed to load extension" not in startup, startup
-        assert "completo en varias líneas" in startup, f"{mode}: wrapped title absent"
+        assert "varias líneas" in startup, f"{mode}: wrapped title absent"
         assert "/todos · ver lista completa" not in startup, f"{mode}: old footer still visible"
         if mode == "fullscreen":
             # SGR wheel down, over the sidebar body. No global mouse hooks needed.
@@ -86,14 +88,14 @@ def run(mode, temp):
         resize(170)
         os.kill(process.pid, signal.SIGWINCH)
         wide = drain(1)
-        assert "TAREAS" in wide, f"{mode}: sidebar did not return after resize"
+        assert "│" in wide, f"{mode}: sidebar did not return after resize"
         assert process.poll() is None, f"{mode}: exited on resize"
         hidden = command("/todos hide")
         shown = command("/todos show")
-        assert "TAREAS" in shown, f"{mode}: show command failed"
+        assert "│" in shown, f"{mode}: show command failed"
         reload_output = command("/reload") + drain(2)
         assert process.poll() is None, f"{mode}: exited on reload"
-        assert "TAREAS" in reload_output, f"{mode}: sidebar absent after reload"
+        assert "│" in reload_output, f"{mode}: sidebar absent after reload"
         assert "Prueba real del sidebar" in reload_output, f"{mode}: state lost on reload"
         listed = command("/todos")
         assert "Esc cerrar" in listed, f"{mode}: full-list view failed"

@@ -31,20 +31,40 @@ La carpeta `~/.pi/agent/extensions/focus/` se descubre como extensión global. `
 | Pensamiento estructurado | Oculto, sin etiquetas `Thinking...`. |
 | Texto del asistente durante la ejecución | Oculto hasta que termina el procesamiento automático. |
 | Respuesta final o pregunta final | Completa y sin el pensamiento. |
-| `read`, `bash`, `powershell`, `edit`, `write`, `grep`, `find`, `ls`, `todowrite` | Ocultos si no fallan. |
+| Lectura de `SKILL.md` o invocación `/skill:name` | Una línea con el nombre de la skill, sin sus instrucciones. |
+| Otras lecturas y `bash`, `powershell`, `edit`, `write`, `grep`, `find`, `ls`, `todowrite` | Ocultos si no fallan. |
 | `tool_search`, `web_enable`, `subagents_enable` | Ocultos si no fallan. |
-| `codemode` | Oculto, con resúmenes de sus llamadas anidadas a web, memoria o subagentes. |
-| `web_search`, `source_check`, `fetch_content`, `get_search_content` | Una línea con la consulta, la URL o la operación. |
-| Herramientas `mem_*` | Una línea con la operación de Engram, sin el contenido de la memoria. |
-| `subagent`, `subagent_supervisor`, `bg_wait` | Una línea con el agente, la tarea o la operación. |
+| `codemode` | Oculto, con resúmenes de sus llamadas anidadas a web, memoria, subagentes o skills. |
+| `web_search`, `source_check`, `fetch_content`, `get_search_content` | Una línea con icono, la consulta, la URL o la operación. |
+| Herramientas `mem_*` | Una línea con icono, la operación de Engram y sin el contenido de la memoria. |
+| `subagent` con lanzamiento | Una tarjeta por agente. |
+| `subagent_supervisor`, `bg_wait`, `contact_supervisor` con `progress_update` | Una línea con el agente o la operación. |
 | Notificaciones de subagentes con éxito confirmado | Una línea con el agente y el estado. |
 | Errores, respuestas truncadas y cancelaciones | Visibles. |
 | Permisos, solicitudes de decisión y avisos de atención | Visibles con su interfaz nativa. |
 | Herramientas y mensajes de extensiones desconocidas | Visibles con su interfaz nativa. |
 
-Los paneles, los diálogos, el editor y el indicador de actividad de Pi conservan su comportamiento. El panel de tareas permanece visible. Los paneles que el usuario abre desde otras extensiones, como la actividad web, no se cierran.
+Los diálogos, el editor y el indicador de actividad de Pi conservan su comportamiento. El panel de tareas permanece visible. Los paneles que el usuario abre desde otras extensiones, como la actividad web, no se cierran.
+
+En esta instalación, `~/.pi/agent/extensions/subagent/config.json` define `asyncWidget: false` y `fleetView: false` para evitar resúmenes duplicados junto a las tarjetas. Son ajustes globales de `pi-subagents`, independientes de `/focus`. El seguimiento, las notificaciones y el inspector `/subagents-fleet` siguen disponibles.
 
 `/focus off` recupera las llamadas y el pensamiento sin volver a ejecutar nada. Los controles nativos de expansión siguen determinando cuánto detalle muestra esa vista.
+
+Las lecturas de `SKILL.md` muestran `Cargando skill · nombre` mientras se ejecutan y `Skill cargada · nombre` al terminar correctamente. El nombre procede del frontmatter devuelto por la lectura. Si no está disponible, Focus usa el nombre de la carpeta. Las lecturas fallidas conservan su error nativo y no se muestran como cargas correctas. Las invocaciones `/skill:name` muestran el nombre aunque la expansión nativa esté activada.
+
+Focus no enumera las skills disponibles como si estuvieran cargadas. Detecta las lecturas de `SKILL.md` mediante `read` y las invocaciones explícitas. No detecta lecturas mediante `bash` ni instrucciones que ya estaban en el contexto antes del historial visible. Las lecturas de fragmentos y las llamadas anidadas sin contenido conservado usan el nombre de la carpeta.
+
+## Tarjetas de subagente
+
+Cada lanzamiento de `subagent` dibuja una tarjeta por agente, con dos columnas de margen interior y una fila vacía arriba y abajo. El fondo usa `customMessageBg`.
+
+El borde y el nombre usan colores exactos del tema, sin mezclarlos. `ox-scout` usa `toolDiffAdded`, `ox-researcher` usa `mdLink` y `ox-reviewer` usa `syntaxFunction`. Otros nombres reciben un token estable del tema. La primera fila de contenido muestra el estado y el tiempo. En un terminal ancho, el modelo, el nivel de pensamiento, los tokens de contexto y de salida, el coste y el número de llamadas van a la derecha de esa fila. Después vienen la tarea y la última herramienta que usó el run, con la URL o la ruta cuando la herramienta es de web, lectura o búsqueda de archivos.
+
+Los datos salen del `status.json` que el run escribe en su `asyncDir`. La extensión lee ese archivo como mucho una vez por segundo y lo cachea por run. Mientras un run sigue activo, un temporizador de un segundo pide un repintado para que el tiempo y la actividad avancen. Un run terminado deja de refrescar y muestra el estado final.
+
+La tarjeta no copia el cuerpo del resultado ni el contenido de la memoria. Solo muestra argumentos de `web_search`, `source_check`, `fetch_content`, `get_search_content`, `read`, `grep`, `find` y `ls`. Los argumentos de `mem_*`, `bash` y otras herramientas quedan fuera aunque el run los haya usado.
+
+Sin `status.json`, la tarjeta usa el resultado del lanzamiento o, si aún no existe, el agente y la tarea del propio input. Los chips de Web y de Engram usan un icono y un color fijos, para que se distingan de un subagente sin leer el texto.
 
 ## Compatibilidad y límites
 
@@ -68,6 +88,6 @@ node extensions/focus/tests/typecheck.mjs
 python3 extensions/focus/tests/live-smoke.py
 ```
 
-Las pruebas unitarias usan los componentes reales de Pi. Las pruebas PTY cubren ambos modos de terminal, el panel de tareas, los permisos, el redimensionado, la salida interactiva y la recarga. El proveedor de prueba es local, determinista y no hace llamadas de red.
+Las pruebas unitarias usan los componentes reales de Pi. Las pruebas PTY cubren ambos modos de terminal, los nombres de las skills consultadas, el panel de tareas, los permisos, el redimensionado, la salida interactiva y la recarga. El proveedor de prueba es local, determinista y no hace llamadas de red.
 
 Las pruebas PTY comprueban que el contenido oculto sigue en el historial y en las siguientes peticiones del modelo. También comparan las peticiones con Focus activo y desactivado, sin las marcas de tiempo, las duraciones ni los campos de texto `id`.

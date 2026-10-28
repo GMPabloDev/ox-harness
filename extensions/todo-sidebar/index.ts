@@ -1,7 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { matchesKey, Text, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { ENTRY_TYPE, emptyState, mountSidebar, parseState, restoreState, TodoPanel } from "./core.ts";
+import { ENTRY_TYPE, emptyState, mountSidebar, parseState, restoreState, sidebarWidth, TodoPanel } from "./core.ts";
+import { sessionLines } from "./status.ts";
 import type { TodoState } from "./core.ts";
 
 const parameters = Type.Object({
@@ -37,12 +38,24 @@ export default function todoSidebar(pi: ExtensionAPI) {
 		dispose();
 		restore(ctx);
 		if (ctx.mode !== "tui") return;
+		let footerData: Parameters<Parameters<typeof ctx.ui.setFooter>[0] & Function>[2] | undefined;
+		ctx.ui.setFooter((tui, _theme, data) => {
+			footerData = data;
+			const unsubscribe = data.onBranchChange(() => tui.requestRender());
+			return {
+				invalidate() {}, dispose: unsubscribe,
+				render(width) {
+					if (mounted?.layout.enabled && sidebarWidth(tui.terminal.columns, tui.terminal.rows)) return [];
+					return sessionLines(pi, ctx, data.getGitBranch(), data.getExtensionStatuses(), ctx.ui.theme, true).map(line => truncateToWidth(line, width));
+				},
+			};
+		});
 		// A zero-line widget provides the TUI reference and Pi-managed disposal.
 		// Its content is drawn by a regular Container, not by a floating overlay.
 		ctx.ui.setWidget("todo-sidebar-lifecycle", (tui) => {
 			panel = new TodoPanel(() => ctx.ui.theme);
 			panel.setState(state);
-			mounted = mountSidebar(tui, panel);
+			mounted = mountSidebar(tui, panel, () => sessionLines(pi, ctx, footerData?.getGitBranch() ?? null, footerData?.getExtensionStatuses() ?? new Map(), ctx.ui.theme, tui.terminal.rows < 28));
 			requestRender = () => tui.requestRender();
 			return { render: () => { mounted?.sync(); return []; }, invalidate: () => panel?.invalidate(), dispose };
 		});

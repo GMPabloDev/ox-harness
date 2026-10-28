@@ -7,7 +7,7 @@ El principal implementa, ejecuta las comprobaciones y corrige. `ox-reviewer` rev
 1. Ejecuta las comprobaciones finales exigidas por la SPEC y el repositorio. Reutiliza evidencia de los bloques solo si sigue vigente. No sustituyas una comprobación pendiente por la opinión del revisor.
 2. Identifica la raíz Git, la rama de la SPEC, `HEAD`, la punta de `main` y su ancestro común. Captura el cambio acumulado desde ese ancestro, no solo el último commit o el diff del directorio de trabajo.
 3. Incluye los cambios sin commit y los archivos nuevos pertinentes. Guarda el diff, las rutas y la evidencia en artefactos fuera del proyecto. Registra también el estado del índice y del directorio, y las huellas del contenido pendiente cuando exista. Una referencia a `HEAD` no identifica por sí sola un checkout con cambios.
-4. Prepara un encargo que contenga el objetivo, el repositorio, el `cwd`, las referencias, las rutas de los artefactos, la SPEC, los fundamentos e instrucciones pertinentes, los criterios de aceptación y las validaciones realizadas con sus límites. Identifica las decisiones aprobadas y las incógnitas. No envíes solo el resumen del implementador ni una conclusión que el revisor deba confirmar. Excluye secretos y datos sensibles.
+4. Prepara un encargo que contenga el objetivo, el repositorio, el `cwd`, las referencias, las rutas de los artefactos, la SPEC, los fundamentos e instrucciones pertinentes, los criterios de aceptación y las validaciones realizadas con sus límites. Identifica las decisiones aprobadas y las incógnitas. Prepara también [la entrega selectiva de principios al revisor fresh](../ox-mode/principles.md#revisión-con-contexto-nuevo), con rutas absolutas e instrucciones de lectura. No envíes solo el resumen del implementador ni una conclusión que el revisor deba confirmar. Excluye secretos y datos sensibles.
 5. Mantén estable el código durante la revisión. No edites, cambies de rama ni permitas otro escritor en esa carpeta mientras el revisor inspecciona el resultado.
 
 El principal captura el diff y ejecuta Git porque `ox-reviewer` solo tiene herramientas de lectura. El revisor puede leer los archivos y contratos del checkout estable y contrastarlos con la evidencia recibida.
@@ -37,7 +37,7 @@ Esta regla también se aplica a los bugs detectados durante un bloque o comunica
 
 ## Revisar los arreglos
 
-Después de corregir hallazgos de la revisión final, encarga una comprobación enfocada a `ox-reviewer` con contexto nuevo. Incluye los identificadores, su disposición, la versión anterior, el diff correctivo completo, la versión actual y la evidencia de las nuevas comprobaciones.
+Después de corregir hallazgos de la revisión final, encarga una comprobación enfocada a `ox-reviewer` con contexto nuevo. Recalcula y entrega [los principios pertinentes a los arreglos](../ox-mode/principles.md#revisión-con-contexto-nuevo) en ese nuevo encargo. Incluye los identificadores, su disposición, la versión anterior, el diff correctivo completo, la versión actual y la evidencia de las nuevas comprobaciones.
 
 Pide comprobar si los fallos aceptados se resolvieron, si el arreglo introduce problemas en los recorridos afectados y si las observaciones pendientes siguen vigentes. No repitas toda la revisión por cada arreglo localizado. Si cambian contratos, diseño o varias áreas de forma que la revisión anterior ya no cubra el resultado, amplía la revisión o repítela completa.
 

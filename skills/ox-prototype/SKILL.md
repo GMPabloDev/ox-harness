@@ -10,7 +10,7 @@ metadata:
 
 Use the prototype to choose a direction. Treat its code as disposable. Do not start production implementation as part of this workflow.
 
-Read [Exhaust the Design Space](../ox-principle-exhaust-the-design-space/SKILL.md) in full before applying that principle. Resolve the path relative to this skill directory. Keep the principle separate from this procedure.
+Read the [shared principle selector](../ox-mode/principles.md) before choosing the comparison. Use the triggers for the open decision and read only the relevant original principles in full. A prototype needs its own authorization when the current task is definition only.
 
 ## 1. Name the decision
 
@@ -27,8 +27,6 @@ Prototypes can precede specifications, inform them, or follow backend work. Insp
 ## 2. Set the direction and comparison
 
 Preserve the user's requirements in every variant. Inspect existing styles and relevant interactions before choosing a visual direction.
-
-When comparing product scope, UX, or API ergonomics, read [Experience First](../ox-principle-experience-first/SKILL.md) in full before choosing comparison criteria.
 
 If visual identity is not under review, reuse existing styles. If none exist, choose a provisional palette and state that assumption.
 

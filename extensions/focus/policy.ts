@@ -1,5 +1,7 @@
+import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+
 // Presentation policy only. These functions never transform model messages.
-export type ActivityKind = "subagent" | "web" | "memory";
+export type ActivityKind = "subagent" | "web" | "memory" | "skill";
 export type ToolPolicy = "hidden" | "native" | ActivityKind;
 type RecordValue = Record<string, unknown>;
 export const record = (value: unknown): RecordValue => value !== null && typeof value === "object" ? value as RecordValue : {};
@@ -9,7 +11,8 @@ const routine = new Set([
 	"tool_search", "codemode", "subagents_enable", "web_enable",
 ]);
 
-export function toolPolicy(name: string): ToolPolicy {
+export function toolPolicy(name: string, input?: unknown): ToolPolicy {
+	if (name === "read" && /(?:^|[\\/])SKILL\.md$/.test(String(record(input).path ?? ""))) return "skill";
 	if (routine.has(name)) return "hidden";
 	if (/^mem_/.test(name)) return "memory";
 	if (["subagent", "subagent_supervisor", "contact_supervisor", "bg_wait"].includes(name)) return "subagent";
@@ -32,8 +35,39 @@ function firstText(args: RecordValue, keys: string[]): string {
 	return "";
 }
 
-export function activityLabel(kind: ActivityKind, name: string, input: unknown): string {
+// Render runs repeatedly while the model streams. Cache parsed names without
+// retaining tool results after their native components are released.
+const skillNames = new WeakMap<object, { text: string; name: string }>();
+
+function skillName(input: unknown, result: unknown): string {
 	const args = record(input);
+	// Use only content already returned to the model. Do not read files or load
+	// skills on the user's behalf just to obtain a display name.
+	if (!(typeof args.offset === "number" && args.offset > 1)) {
+		const content = record(result).content;
+		const first = Array.isArray(content) ? content.find(block => record(block).type === "text") : undefined;
+		const text = record(first).text;
+		if (typeof text === "string") {
+			const key = record(result);
+			let cached = skillNames.get(key);
+			if (!cached || cached.text !== text) {
+				let name = "";
+				try { name = cleanLine(record(parseFrontmatter(text).frontmatter).name, 64); }
+				catch { /* Malformed or truncated frontmatter: use the directory name. */ }
+				cached = { text, name };
+				skillNames.set(key, cached);
+			}
+			if (cached.name) return cached.name;
+		}
+	}
+	const parts = String(args.path ?? "").replaceAll("\\", "/").split("/").filter(part => part && part !== ".");
+	const folder = parts.at(-2);
+	return cleanLine(folder && folder !== ".." ? folder : "SKILL.md", 64);
+}
+
+export function activityLabel(kind: ActivityKind, name: string, input: unknown, options: { pending?: boolean; result?: unknown } = {}): string {
+	const args = record(input);
+	if (kind === "skill") return `${options.pending ? "Cargando skill" : "Skill cargada"} · ${skillName(input, options.result)}`;
 	if (kind === "memory") return "Engram · " + name.replace(/^mem_/, "").replace(/_/g, " ");
 	if (kind === "web") {
 		const queries = Array.isArray(args.queries) ? args.queries : [];
@@ -41,6 +75,7 @@ export function activityLabel(kind: ActivityKind, name: string, input: unknown):
 		const detail = firstText(args, ["query", "url", "claim"]) || cleanLine(queries[0]) || firstText(record(queries[0]), ["query"]) || cleanLine(urls[0]);
 		return "Web" + (detail ? " · " + detail : " · " + name);
 	}
+	if (name === "bg_wait") return "Subagentes · esperando";
 	const detail = firstText(args, ["agent", "action", "reason", "workflow"]);
 	const task = firstText(args, ["task", "message"]);
 	return "Subagentes" + (detail ? " · " + detail : "") + (task ? " · " + task : "");
@@ -63,6 +98,13 @@ export function customActivity(message: unknown): string | undefined {
 	// Requests, failures, watchdog warnings, and unrecognized/legacy payloads
 	// keep their native renderer. Do not infer success from a display string.
 	return;
+}
+
+export function customAgent(message: unknown): string | undefined {
+	const details = record(record(message).details);
+	const runs = Array.isArray(details.runs) ? details.runs.map(record) : [];
+	const run = runs.find(item => cleanLine(item.agent, 40));
+	return cleanLine(run?.agent ?? details.childKey, 40) || undefined;
 }
 
 export function toolHasError(result: unknown): boolean {

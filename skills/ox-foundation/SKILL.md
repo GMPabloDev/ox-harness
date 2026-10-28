@@ -35,10 +35,7 @@ Resume brevemente el producto entendido y las decisiones que necesitan atención
 
 Si faltan decisiones, lee [questions.md](questions.md) y usa solo los temas pertinentes. Pregunta cuando la respuesta cambie el producto, afecte a varias features, comprometa seguridad o datos, o tenga un coste relevante de sustitución. Difiere lo que no bloquee el inicio y pueda resolverse mejor en una SPEC.
 
-Antes de comparar alternativas, lee completo cada principio pertinente:
-
-- [Experience First](../ox-principle-experience-first/SKILL.md) si eliges el recorrido principal, el alcance inicial o la experiencia del consumidor.
-- [Foundational Thinking](../ox-principle-foundational-thinking/SKILL.md) si decides estructuras compartidas, estado concurrente o preparación técnica común.
+Antes de comparar alternativas, lee el [selector común de principios](../ox-mode/principles.md). Selecciona por las decisiones abiertas de producto, estructuras o acuerdos compartidos y lee completos solo los originales pertinentes. Esa lectura no autoriza experimentos ni implementación desde esta fase.
 
 Al plantear las decisiones, aplica estas reglas:
 

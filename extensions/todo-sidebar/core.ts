@@ -49,9 +49,11 @@ export function restoreState(entries: Iterable<unknown>): TodoState {
 	return state;
 }
 
+const SIDEBAR_GAP = 5;
+
 export function sidebarWidth(columns: number, rows: number): number {
 	if (columns < 120 || rows < 16) return 0;
-	return Math.min(42, Math.max(30, Math.floor(columns * 0.24)));
+	return Math.min(50, Math.max(33, Math.floor(columns * 0.26)));
 }
 
 /** Apply follow targets only after native layout has measured the new content. */
@@ -102,6 +104,7 @@ export class TodoPanel extends VStack {
 		}, { shrink: 0 });
 		this.addChild(this.scroll, { basis: 0, grow: 1, shrink: 1, minSize: 1 });
 	}
+	getTheme(): Theme { return this.theme(); }
 	setState(state: TodoState): void {
 		const newPlan = state.title !== this.state.title || state.todos.map(t => t.id).join("\0") !== this.state.todos.map(t => t.id).join("\0");
 		this.state = state;
@@ -141,20 +144,20 @@ export class TodoPanel extends VStack {
 		const amber = th.colors.mdHeading;
 		const { todos, title } = this.state;
 		const completed = todos.filter(t => t.status === "completed").length;
-		const cancelled = todos.filter(t => t.status === "cancelled").length;
-		const finished = todos.length > 0 && completed + cancelled === todos.length;
-		const active = todos.some(t => t.status === "in_progress");
 		const inner = Math.max(1, width - 3);
-		const barWidth = Math.max(1, inner - 10);
-		const filled = todos.length ? Math.round(barWidth * (completed + cancelled) / todos.length) : 0;
-		const bar = th.style("━".repeat(filled), { fg: amber }) + th.fg("borderMuted", "━".repeat(barWidth - filled));
+		const count = `${completed}/${todos.length}`;
+		const maxDots = Math.max(1, Math.floor((inner - count.length - 2) / 2));
+		const dots = Math.min(todos.length, maxDots);
+		const proportional = todos.length ? Math.round(dots * completed / todos.length) : 0;
+		const filled = dots > 1 && completed > 0 && completed < todos.length ? Math.max(1, Math.min(dots - 1, proportional)) : proportional;
+		const progress = Array.from({ length: dots }, (_, index) => index < filled
+			? th.style("●", { fg: amber }) : th.fg("borderMuted", "○")).join(" ");
 		const lines = [
 			"",
-			th.style("TAREAS", { fg: amber, bold: true }),
-			...wrapTextWithAnsi(title, inner).map(text => th.fg("text", text)),
-			bar + th.fg("muted", `  ${completed}/${todos.length}`),
-			th.style(finished ? "Plan finalizado" : active ? "En curso" : todos.length ? "Pendiente" : "Sin tareas todavía", { fg: finished ? "success" : amber }),
-			th.fg("borderMuted", "─".repeat(Math.max(1, width - 4))),
+			...wrapTextWithAnsi(title, inner).map(text => th.style(text, { fg: "text", bold: true })),
+			"",
+			progress + th.fg("muted", `${dots ? "  " : ""}${count}`),
+			"",
 		].map(text => this.line(text, width));
 		this.headerCache.set(width, lines);
 		return lines;
@@ -182,17 +185,20 @@ export class TodoPanel extends VStack {
 		if (body.length) body.pop();
 		else body.push(th.fg("muted", "El plan aparecerá aquí"), th.fg("muted", "cuando empiece el trabajo."));
 		if (this.scroll.followingActive && activeRow !== undefined) this.scroll.target = activeRow;
-		const capacity = Math.max(1, this.height - this.renderHeader(width + 1).length);
-		while (body.length < capacity) body.push("");
 		const lines = body.map(text => this.line(text, width));
 		this.contentRows = lines.length;
 		this.bodyCache.set(width, lines);
 		return lines;
 	}
 
+	/** Height needed for the complete list at this width, before viewport clipping. */
+	naturalHeight(width: number): number {
+		return this.renderHeader(width).length + this.renderBody(Math.max(1, width - 1)).length;
+	}
+
 	/** Regular mode uses the same scroll state, without enabling mouse capture. */
 	renderHeight(width: number, height: number): string[] {
-		if (width < 30 || height < 16) return Array.from({ length: Math.max(0, height) }, () => "");
+		if (width < 1 || height < 1) return Array.from({ length: Math.max(0, height) }, () => "");
 		this.setHeight(height);
 		const header = this.renderHeader(width);
 		const capacity = Math.max(1, height - header.length);
@@ -203,7 +209,7 @@ export class TodoPanel extends VStack {
 		const thumbTop = max ? Math.round(this.scroll.scrollTop / max * (capacity - thumbHeight)) : 0;
 		return [...header, ...Array.from({ length: capacity }, (_, row) => {
 			const thumb = row >= thumbTop && row < thumbTop + thumbHeight;
-			return body[this.scroll.scrollTop + row] + this.scrollbarStyle(thumb ? "┃" : "│", thumb ? "muted" : "borderMuted");
+			return (body[this.scroll.scrollTop + row] ?? this.line("", width - 1)) + this.scrollbarStyle(thumb ? "┃" : "│", thumb ? "muted" : "borderMuted");
 		})];
 	}
 }
@@ -213,10 +219,52 @@ function fit(text: string, width: number): string {
 	return clipped + " ".repeat(Math.max(0, width - visibleWidth(clipped)));
 }
 
+/** Two sections with separate left rails; the task ScrollView remains a native layout node. */
+export class Sidebar extends VStack {
+	private height = 24;
+	private status: () => string[] = () => [];
+	constructor(private tui: TUI, readonly tasks: TodoPanel, private theme: () => Theme) {
+		super();
+		const edge = (text: string) => this.theme().fg("mdCode", text);
+		const vertical = () => ({ render: () => Array.from({ length: this.tui.terminal.rows }, () => edge("│")), invalidate() {} });
+		const info = { render: (width: number) => this.infoLines().map(line => edge("│") + fit(" " + line, Math.max(0, width - 1))), invalidate() {} };
+		const taskRow = new HStack([], { align: "stretch" });
+		taskRow.addChild(vertical(), { basis: 1, grow: 0, shrink: 0 });
+		taskRow.addChild(tasks, { basis: 0, grow: 1, shrink: 1, minSize: 1 });
+		this.addChild(info, { shrink: 0 });
+		this.addChild({ render: () => [""], invalidate() {} }, { shrink: 0, visible: () => this.tasks.state.todos.length > 0 });
+		this.addChild(taskRow, { basis: 0, grow: 0, shrink: 1, minSize: 1, visible: viewport => {
+			if (!this.tasks.state.todos.length) return false;
+			const width = sidebarWidth(viewport.width, viewport.height);
+			const available = Math.max(1, viewport.height - this.infoRows() - 1);
+			const height = Math.min(available, this.tasks.naturalHeight(Math.max(1, width - 1)));
+			this.entries[2].basis = height;
+			this.tasks.setHeight(height);
+			return true;
+		} });
+	}
+	setStatus(get: () => string[]): void { this.status = get; }
+	setHeight(height: number): void { this.height = height; this.tasks.setHeight(Math.max(1, height - this.infoRows() - 1)); }
+	private infoRows(): number { return Math.max(1, Math.min(this.status().length, Math.max(1, this.height - (this.tasks.state.todos.length ? 8 : 0)))); }
+	private infoLines(): string[] { const lines = this.status().slice(0, this.infoRows()); return lines.length ? lines : [""]; }
+	render(width: number): string[] { return this.renderHeight(width, this.height); }
+	renderHeight(width: number, height: number): string[] {
+		this.setHeight(height);
+		const edge = (text: string) => this.theme().fg("mdCode", text);
+		const info = this.infoLines().map(line => edge("│") + fit(" " + line, width - 1));
+		if (!this.tasks.state.todos.length) return [...info, ...Array(Math.max(0, height - info.length)).fill(" ".repeat(width))];
+		const available = Math.max(1, height - info.length - 1);
+		const taskHeight = Math.min(available, this.tasks.naturalHeight(width - 1));
+		const body = this.tasks.renderHeight(width - 1, taskHeight);
+		const lines = [...info, " ".repeat(width), ...body.map(line => edge("│") + fit(line, width - 1))];
+		return [...lines, ...Array(Math.max(0, height - lines.length)).fill(" ".repeat(width))];
+	}
+}
+
 /** Regular-mode layout. The original components retain focus and input ownership. */
 export class TodoSidebarLayout extends Container {
 	enabled = true;
-	constructor(private tui: TUI, readonly panel: TodoPanel, children: Component[]) {
+	constructor(private tui: TUI, readonly panel: Sidebar, children: Component[]) {
 		super();
 		this.children = children;
 	}
@@ -225,7 +273,7 @@ export class TodoSidebarLayout extends Container {
 		const height = this.tui.terminal.rows;
 		const side = this.enabled && this.tui.mode === "regular" ? sidebarWidth(width, height) : 0;
 		if (!side) return super.render(width);
-		const mainWidth = width - side - 1;
+		const mainWidth = width - side - SIDEBAR_GAP;
 		const blocks = this.children.map(child => child.render(mainWidth));
 		const length = blocks.reduce((sum, block) => sum + block.length, 0);
 		// Keep the editor and native footer at the bottom when the chat is short.
@@ -236,14 +284,14 @@ export class TodoSidebarLayout extends Container {
 		return left.map((text, row) => {
 			// Only the visible viewport has a panel. No old task snapshots in the document.
 			if (row < top) return text;
-			return fit(text, mainWidth) + "\x1b[0m " + right[row - top];
+			return fit(text, mainWidth) + "\x1b[0m" + " ".repeat(SIDEBAR_GAP) + right[row - top];
 		});
 	}
 }
 
 class FullscreenSidebarLayout extends HStack {
-	constructor(tui: TUI, root: Component, panel: TodoPanel, regular: TodoSidebarLayout) {
-		super([], { gap: 1, align: "stretch" });
+	constructor(tui: TUI, root: Component, panel: Sidebar, regular: TodoSidebarLayout) {
+		super([], { gap: SIDEBAR_GAP, align: "stretch" });
 		this.addChild(root, { basis: 0, grow: 1, shrink: 1, minSize: 1 });
 		this.addChild(panel, {
 			basis: 0, grow: 0, shrink: 0,
@@ -257,7 +305,9 @@ class FullscreenSidebarLayout extends HStack {
 	}
 }
 
-export function mountSidebar(tui: TUI, panel: TodoPanel): { layout: TodoSidebarLayout; sync(): void; dispose(): void } {
+export function mountSidebar(tui: TUI, tasks: TodoPanel, status: () => string[] = () => []): { layout: TodoSidebarLayout; sync(): void; dispose(): void } {
+	const panel = new Sidebar(tui, tasks, () => tasks.getTheme());
+	panel.setStatus(status);
 	const children = [...tui.children];
 	const layout = new TodoSidebarLayout(tui, panel, children);
 	tui.children.splice(0, tui.children.length, layout);

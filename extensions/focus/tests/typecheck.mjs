@@ -15,7 +15,7 @@ try {
 			noEmit: true, skipLibCheck: true, allowImportingTsExtensions: true,
 			paths: { "@earendil-works/*": [`${modules}/@earendil-works/*`] },
 		},
-		files: ["index.ts", "view.ts", "policy.ts", "preferences.ts", "tests/fixture.ts"].map(file => resolve(root, file)),
+		files: ["index.ts", "view.ts", "policy.ts", "preferences.ts", "cards.ts", "tests/fixture.ts", "../tool-status/index.ts"].map(file => resolve(root, file)),
 	}));
 	const result = spawnSync(process.execPath, [resolve(modules, "typescript/bin/tsc"), "-p", config], { stdio: "inherit" });
 	process.exitCode = result.status ?? 1;

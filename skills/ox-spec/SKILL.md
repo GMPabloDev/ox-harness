@@ -22,12 +22,7 @@ Responde en el idioma del usuario. Escribe la SPEC en el idioma del repositorio 
 
 Revisa alcance, comportamiento observable, datos, contratos, integración, migración, seguridad, errores y riesgos. Usa primero la información de la conversación y del repositorio. No conviertas estas categorías en un cuestionario obligatorio.
 
-Lee completos solo los principios pertinentes a las decisiones abiertas:
-
-- [Experience First](../ox-principle-experience-first/SKILL.md) al comparar alcance, recorridos de usuario o ergonomía de un contrato.
-- [Foundational Thinking](../ox-principle-foundational-thinking/SKILL.md) al fijar representaciones compartidas, estado concurrente o el orden de preparación y capacidades.
-- [Redesign from First Principles](../ox-principle-redesign-from-first-principles/SKILL.md) cuando el requisito cuestione las responsabilidades o invariantes del diseño existente.
-- [Subtract Before You Add](../ox-principle-subtract-before-you-add/SKILL.md) cuando el plan deba retirar complejidad innecesaria identificada antes de construir.
+Antes de resolver una decisión o fijar el plan, lee el [selector común de principios](../ox-mode/principles.md). Usa los activadores de definición, contratos y planificación según las decisiones abiertas. Lee completos solo los originales pertinentes y conserva las autorizaciones de esta fase.
 
 Resuelve las dudas con estas reglas:
 

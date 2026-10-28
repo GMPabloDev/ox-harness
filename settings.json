@@ -1,6 +1,6 @@
 {
   "$schema": "https://pi.dev/schemas/settings.schema.json",
-  "theme": "tokyo-night",
+  "theme": "ox-theme",
   "packages": [
     "npm:gentle-engram@0.3.0",
     "npm:pi-web-access",
@@ -8,15 +8,15 @@
     "npm:pi-subagents@0.79.0"
   ],
   "lastChangelogVersion": "1.4.0",
-  "defaultProvider": "openai",
+  "defaultProvider": "openai-codex",
   "defaultModel": "gpt-6.1-sol",
   "modelThinkingLevels": {
-    "openai/gpt-6-luna": "max",
-    "openai/gpt-6.1-sol": "high"
+    "openai-codex/gpt-6-luna": "max",
+    "openai-codex/gpt-6.1-sol": "high"
   },
   "enabledModels": [
-    "openai/gpt-6-luna",
-    "openai/gpt-6.1-sol",
+    "openai-codex/gpt-6.1-sol",
+    "openai-codex/gpt-6-luna",
     "opencode-go/beam-free",
     "opencode-go/deepseek-v4.1-flash",
     "opencode-go/longcat-2.5-preview-free",

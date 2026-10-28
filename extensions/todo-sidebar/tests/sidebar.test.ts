@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Container, CURSOR_MARKER, ScrollView, Text, TuiAltScreen, TuiMainScreen, VStack, visibleWidth } from "@earendil-works/pi-tui";
-import { ENTRY_TYPE, emptyState, mountSidebar, parseState, restoreState, sidebarWidth, TodoPanel } from "../core.ts";
+import { ENTRY_TYPE, emptyState, mountSidebar, parseState, restoreState, sidebarWidth, Sidebar, TodoPanel } from "../core.ts";
 import extension from "../index.ts";
+import { sessionLines } from "../status.ts";
 
 const globalModules = process.env.PI_GLOBAL_NODE_MODULES ?? "/home/osiosad/.bun/install/global/node_modules";
 const { loadThemeFromPath } = await import(`${globalModules}/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js`);
@@ -36,12 +37,15 @@ function harness(mode = "tui") {
 		registerTool(tool: any) { tools.set(tool.name, tool); },
 		registerCommand(name: string, command: any) { commands.set(name, command); },
 		registerShortcut(key: string, shortcut: any) { shortcuts.set(key, shortcut); },
+		getThinkingLevel: () => "high",
 		appendEntry(customType: string, data: unknown) { entries.push({ type: "custom", customType, data: structuredClone(data) }); },
 	};
 	const ctx = {
-		mode, hasUI: mode === "tui", sessionManager: { getBranch: () => entries },
+		mode, hasUI: mode === "tui", cwd: "/home/test", getContextUsage: () => ({ percent: 20, contextWindow: 100000 }),
+		model: { provider: "test", id: "model", reasoning: true }, sessionManager: { getBranch: () => entries, getEntries: () => entries },
 		ui: {
 			theme,
+			setFooter(factory: Function) { factory(native.tui, theme, { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), onBranchChange: () => () => {} }); },
 			setWidget(_key: string, factory: Function) { widget?.dispose(); widget = factory(native.tui, theme); },
 			confirm: async () => true, notify() {},
 		},
@@ -71,7 +75,42 @@ describe("state", () => {
 	});
 });
 
+describe("session information", () => {
+	test("includes model, usage, directory, branch and extension statuses", () => {
+		const usage = { input: 1000, output: 250, cacheRead: 9000, cacheWrite: 0, cost: { total: 1.23 } };
+		const ctx = { cwd: "/work/demo", model: { provider: "provider", id: "model", reasoning: true, contextWindow: 100000 }, getContextUsage: () => ({ percent: 20, contextWindow: 100000 }), sessionManager: { getEntries: () => [{ type: "message", message: { role: "assistant", usage } }] } };
+		const lines = sessionLines({ getThinkingLevel: () => "high" } as any, ctx as any, "main", new Map([["focus", "focus activo"]])).join("\n");
+		for (const value of ["Proveedor", "Modelo", "Proyecto", "Detalles", "provider", "model", "high", "/work/demo", "main", "20.0%", "↑1.0k", "R9.0k", "$1.230", "90.0%", "focus activo"]) expect(lines).toContain(value);
+		const styled = sessionLines({ getThinkingLevel: () => "high" } as any, ctx as any, "main", new Map([["focus", "focus activo"], ["engram", "🧠 yay"]]), theme);
+		expect(styled[0]).toBe("");
+		expect(styled.join("\n")).toContain(theme.fg("mdCode", "provider"));
+		expect(styled.join("\n")).toContain(theme.fg("success", "$1.230 · caché 90.0%"));
+		expect(styled.map(plain).indexOf("Detalles")).toBeGreaterThan(styled.map(plain).findIndex(line => line.includes("Coste estimado")));
+		const compact = sessionLines({ getThinkingLevel: () => "high" } as any, ctx as any, null, new Map([["focus", "focus activo"]]), theme, true);
+		expect(compact.length).toBeLessThanOrEqual(8);
+		expect(compact.map(plain).join("\n")).toContain("Detalles  focus activo");
+	});
+});
+
 describe("layout", () => {
+	test("draws a separate left rail for each section without a surrounding frame", () => {
+		const { tui } = nativeTui();
+		const tasks = new TodoPanel(() => theme); tasks.setState(state());
+		const sidebar = new Sidebar(tui, tasks, () => theme);
+		sidebar.setStatus(() => ["Modelo", "Contexto"]);
+		const rendered = sidebar.renderHeight(38, 35);
+		expect(rendered[0]).toContain(theme.fg("mdCode", "│"));
+		expect(rendered[3]).toContain(theme.fg("mdCode", "│"));
+		const lines = rendered.map(plain);
+		expect(lines[0].startsWith("│")).toBe(true);
+		expect(lines[1].startsWith("│")).toBe(true);
+		expect(lines[2].trim()).toBe("");
+		expect(lines[3].startsWith("│")).toBe(true);
+		for (const line of lines) {
+			expect(line.endsWith("│")).toBe(false);
+			expect(line).not.toMatch(/[┌┐└┘]/);
+		}
+	});
 	test("uses a full-height right column and preserves editor cursor and native footer", () => {
 		const { tui, editor, terminal } = nativeTui();
 		const panel = new TodoPanel(() => theme); panel.setState(state());
@@ -81,8 +120,8 @@ describe("layout", () => {
 		for (const line of lines) expect(visibleWidth(line)).toBe(terminal.columns);
 		expect(plain(lines[0])).toContain("Pi header");
 		expect(plain(lines[0])).not.toContain("TAREAS");
-		expect(plain(lines[1])).toContain("TAREAS");
-		expect(lines.join("\n")).not.toContain("│");
+		expect(plain(lines.join("\n"))).toContain("Construir sidebar");
+		expect(lines.join("\n")).toContain("│");
 		expect(plain(lines.at(-1)!)).toContain("native footer");
 		expect(lines.join("\n")).toContain(CURSOR_MARKER);
 		expect(tui.getFocusedComponent()).toBe(editor);
@@ -102,32 +141,36 @@ describe("layout", () => {
 	});
 	test("hides on narrow or short terminals and comes back after resize", () => {
 		const { tui, terminal } = nativeTui();
-		mountSidebar(tui, new TodoPanel(() => theme));
+		const panel = new TodoPanel(() => theme); panel.setState(state());
+		mountSidebar(tui, panel);
 		for (const width of [40, 80, 119, 120, 160, 260, 80, 160]) {
 			terminal.columns = width;
 			const lines = tui.render(width);
 			expect(lines.every(line => visibleWidth(line) <= width)).toBe(true);
-			expect(lines.join("\n").includes("TAREAS")).toBe(width >= 120);
+			expect(lines.join("\n").includes("Construir sidebar")).toBe(width >= 120);
 		}
 		terminal.rows = 15;
-		expect(tui.render(160).join("\n")).not.toContain("TAREAS");
-		expect(sidebarWidth(160, 35)).toBe(38);
+		expect(tui.render(160).join("\n")).not.toContain("Construir sidebar");
+		expect(sidebarWidth(160, 35)).toBe(41);
 	});
 	test("retains completed tasks, strikes text, and clears stale cache on updates", () => {
 		const panel = new TodoPanel(() => theme);
 		panel.setState(state(["completed", "completed", "completed"]));
 		const lines = panel.renderHeight(38, 35);
 		expect(lines.join("\n")).toContain("\x1b[9m");
-		expect(plain(lines.join("\n"))).toContain("Plan finalizado");
+		expect(plain(lines.join("\n"))).not.toContain("Plan finalizado");
+		expect(plain(lines.join("\n"))).not.toContain("─");
+		expect(lines.join("\n")).toContain(theme.style("Construir sidebar", { fg: "text", bold: true }));
 		expect(plain(lines.join("\n"))).toContain("Leer contratos");
+		expect(plain(lines.join("\n"))).toContain("● ● ●  3/3");
 		panel.setState(state(["in_progress"]));
-		expect(plain(panel.renderHeight(38, 35).join("\n"))).toContain("En curso");
-		expect(plain(panel.renderHeight(38, 35).join("\n"))).not.toContain("Plan finalizado");
+		expect(plain(panel.renderHeight(38, 35).join("\n"))).not.toContain("En curso");
+		expect(plain(panel.renderHeight(38, 35).join("\n"))).toContain("0/1");
 	});
 	test("wraps CJK, emoji and combining characters within all supported widths", () => {
 		const panel = new TodoPanel(() => theme);
 		panel.setState(parseState({ version: 1, title: "Pruebas 日本語", todos: [{ id: "1", content: "日本語 🧠 café 中文 ".repeat(12), status: "completed" }] }));
-		for (let width = 30; width <= 42; width++) {
+		for (let width = 30; width <= 56; width++) {
 			for (const line of panel.renderHeight(width, 16)) expect(visibleWidth(line)).toBe(width);
 		}
 	});
@@ -150,12 +193,25 @@ describe("layout", () => {
 		panel.setState(data);
 		for (const width of [30, 38, 42]) {
 			const lines = panel.renderHeight(width, 35).map(plain);
-			const title = lines.slice(2, lines.findIndex(line => line.includes("40/40"))).map(line => line.trim()).join(" ");
+			const title = lines.slice(1, lines.findIndex(line => line.includes("40/40"))).map(line => line.trim()).filter(Boolean).join(" ");
 			expect(title).toBe(data.title);
 			expect(lines.join("\n")).not.toContain("…");
 			expect(lines.join("\n")).not.toContain("/todos");
 			expect(lines.join("\n")).not.toContain("guardado");
 			expect(lines).toHaveLength(35);
+		}
+	});
+	test("fits progress points on narrow panels for long lists", () => {
+		const panel = new TodoPanel(() => theme);
+		const data = state(Array(80).fill("pending"));
+		data.todos.slice(0, 40).forEach(todo => { todo.status = "completed"; });
+		panel.setState(data);
+		for (const width of [30, 38, 50]) {
+			const lines = panel.renderHeight(width, 35);
+			const progress = plain(lines.find(line => plain(line).includes("40/80"))!);
+			expect(progress).toContain("●");
+			expect(progress).toContain("○");
+			expect(visibleWidth(progress)).toBe(width);
 		}
 	});
 	test("keeps manual position across task updates and clamps it after resize", () => {
@@ -173,6 +229,42 @@ describe("layout", () => {
 		expect(panel.scroll.scrollTop).toBe(0);
 		panel.setState(state(["pending"])); panel.renderHeight(30, 16);
 		expect(panel.scroll.scrollTop).toBe(0);
+	});
+});
+
+describe("adaptive task box", () => {
+	test("hides without tasks and sizes the rail to the wrapped list in both modes", () => {
+		for (const mode of ["regular", "fullscreen"]) {
+			const terminal = { columns: 160, rows: 35, write() {} };
+			const tui = mode === "regular" ? new TuiMainScreen(terminal as any) : new TuiAltScreen(terminal as any);
+			tui.requestRender = () => {};
+			const root = new VStack([new Text("Chat", 0, 0)]);
+			if (mode === "fullscreen") (tui as TuiAltScreen).setLayoutRoot(root);
+			else tui.addChild(new Text("Chat", 0, 0));
+			const panel = new TodoPanel(() => theme);
+			const mounted = mountSidebar(tui, panel, () => ["Estado"]);
+			const drawFull = () => (mode === "fullscreen" ? renderLayoutFrame(Reflect.get(tui, "layoutRoot"), 160, 35, () => {}).lines : tui.render(160)).map(plain).map((line: string) => line.replace(/\x1b\]8;;\x07/g, ""));
+			const draw = () => drawFull().map((line: string) => line.slice(160 - sidebarWidth(160, 35)));
+			const start = 160 - sidebarWidth(160, 35);
+			expect(drawFull()[0].slice(start - 5, start + 1)).toBe("     │");
+			let lines = draw();
+			expect(lines.filter((line: string) => line.startsWith("│"))).toHaveLength(1);
+			expect(lines.join("\n")).not.toContain("Plan de trabajo");
+			const data = state(["pending"]);
+			data.todos[0].content = "Tarea larga con varias palabras para ocupar más de una línea y comprobar el ajuste";
+			panel.setState(data);
+			lines = draw();
+			const rail = lines.map((line: string, row: number) => line.startsWith("│") ? row : -1).filter((row: number) => row >= 0);
+			expect(rail[0]).toBe(0);
+			expect(rail[1]).toBe(2);
+			expect(rail.at(-1)).toBeLessThan(34);
+			expect(lines.join("\n")).toContain("ajuste");
+			panel.setState(emptyState());
+			lines = draw();
+			expect(lines.filter((line: string) => line.startsWith("│"))).toHaveLength(1);
+			expect(lines.join("\n")).not.toContain("ajuste");
+			mounted.dispose();
+		}
 	});
 });
 
@@ -198,7 +290,7 @@ describe("fullscreen native viewport", () => {
 			const frame = renderLayoutFrame(Reflect.get(tui, "layoutRoot"), columns, rows, () => {});
 			expect(frame.lines).toHaveLength(rows);
 			expect(frame.lines.every((line: string) => visibleWidth(line) <= columns)).toBe(true);
-			expect(frame.lines.join("\n").includes("TAREAS")).toBe(columns >= 120 && rows >= 16);
+			expect(frame.lines.join("\n").includes("Construir sidebar")).toBe(columns >= 120 && rows >= 16);
 			expect(frame.primaryScrollView).toBe(transcript);
 			expect(getScrollViewBox(frame, transcript)).toBeDefined();
 			expect(tui.getFocusedComponent()).toBe(editor);
@@ -206,7 +298,7 @@ describe("fullscreen native viewport", () => {
 			expect(frame.lines.join("\n")).toContain(CURSOR_MARKER);
 		}
 		mounted.layout.enabled = false;
-		expect(renderLayoutFrame(Reflect.get(tui, "layoutRoot"), 160, 35, () => {}).lines.join("\n")).not.toContain("TAREAS");
+		expect(renderLayoutFrame(Reflect.get(tui, "layoutRoot"), 160, 35, () => {}).lines.join("\n")).not.toContain("Construir sidebar");
 		mounted.dispose();
 		expect(Reflect.get(tui, "layoutRoot")).toBe(root);
 		expect(tui.children).toEqual([document, editor, footer]);

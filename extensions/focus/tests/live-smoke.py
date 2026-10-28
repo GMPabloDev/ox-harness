@@ -31,10 +31,13 @@ def run(mode, enabled, folder):
     agent_dir = output_dir / "agent"
     agent_dir.mkdir()
     (agent_dir / "settings.json").write_text(json.dumps({
-        "theme": "dark", "quietStartup": True, "lastChangelogVersion": "1.4.0", "cacheWarming": "off",
+        "theme": "ox-theme", "quietStartup": True, "lastChangelogVersion": "1.4.0", "cacheWarming": "off",
         "defaultProvider": "focus-fixture", "defaultModel": "fixture", "defaultProjectTrust": "never",
     }))
     (agent_dir / "focus.json").write_text(json.dumps({"version": 1, "enabled": enabled}))
+    (agent_dir / "themes").mkdir()
+    theme_path = ROOT.parent.parent / "themes/ox-theme.json"
+    (agent_dir / "themes/ox-theme.json").write_text(theme_path.read_text())
     master, slave = pty.openpty()
 
     def resize(columns, rows=35):
@@ -49,7 +52,8 @@ def run(mode, enabled, folder):
     process = subprocess.Popen([
         "pi", "--offline", "--no-extensions", "--no-mcp", "--no-skills", "--no-context-files", "--no-prompt-templates",
         "--tui-mode", mode, "--provider", "focus-fixture", "--model", "fixture",
-        "-e", str(ROOT / "tests/fixture.ts"), "-e", str(ROOT / "index.ts"), "-e", str(ROOT.parent / "todo-sidebar/index.ts"),
+        "-e", str(ROOT / "tests/fixture.ts"), "-e", str(ROOT / "index.ts"),
+        "-e", str(ROOT.parent / "tool-status/index.ts"), "-e", str(ROOT.parent / "todo-sidebar/index.ts"),
     ], stdin=slave, stdout=slave, stderr=slave, cwd=folder, env=env, start_new_session=True)
     os.close(slave)
     output = bytearray()
@@ -78,7 +82,7 @@ def run(mode, enabled, folder):
     try:
         startup = drain(3)
         assert process.poll() is None, f"{label}: startup exit: {startup}"
-        assert "TAREAS" in startup, f"{label}: sidebar absent: {startup}"
+        assert "FOCUS_SIDEBAR_TEST" in startup, f"{label}: sidebar absent: {startup}"
         status = command("/focus status")
         assert ("Focus activo" if enabled else "Focus desactivado") in status, f"{label}: status wrong: {status}"
         command("/fixture", 0.1)
@@ -97,24 +101,32 @@ def run(mode, enabled, folder):
         transcript = output.decode("utf-8", errors="replace")
         assert "FINAL_VISIBLE" in transcript, f"{label}: final answer missing: {transcript}"
         assert "ENOENT" in transcript, f"{label}: routine tool error hidden"
-        secrets = ["THINKING_SECRET", "PROGRESS_SECRET", "ROUTINE_RESULT_SECRET", "WEB_SEARCH_RESULT_SECRET", "MEM_SEARCH_RESULT_SECRET", "SUBAGENT_RESULT_SECRET"]
+        assert "38;2;255;92;122" in transcript, f"{label}: pink error text absent"
+        assert "48;2;43;20;32" in transcript, f"{label}: error background absent"
+        if not enabled:
+            assert "38;2;95;215;160" in transcript, f"{label}: mint success heading absent"
+            assert "48;2;16;38;32" in transcript, f"{label}: success background absent"
+        secrets = ["THINKING_SECRET", "PROGRESS_SECRET", "ROUTINE_RESULT_SECRET", "WEB_SEARCH_RESULT_SECRET", "MEM_SEARCH_RESULT_SECRET", "SUBAGENT_RESULT_SECRET", "SKILL_BODY_SECRET"]
         if enabled:
             for secret in secrets:
                 assert secret not in transcript, f"{label}: leaked {secret}"
             assert "FIXTURE_WEB_QUERY" in transcript, f"{label}: web summary absent"
             assert "Engram" in transcript, f"{label}: memory summary absent"
             assert "FIXTURE_SUBAGENT_TASK" in transcript, f"{label}: subagent task absent"
+            assert "Skill cargada · fixture-loaded-skill" in transcript, f"{label}: skill name absent"
+            assert "Skill cargada · missing-skill" not in transcript, f"{label}: failed skill marked as loaded"
         else:
             for secret in ["THINKING_SECRET", "PROGRESS_SECRET"]:
                 assert secret in transcript, f"{label}: native view lost {secret}"
         branch = json.loads((output_dir / "branch.json").read_text())
         branch_text = json.dumps(branch)
-        for secret in ["THINKING_SECRET", "PROGRESS_SECRET", "ROUTINE_RESULT_SECRET"]:
+        for secret in ["THINKING_SECRET", "PROGRESS_SECRET", "ROUTINE_RESULT_SECRET", "SKILL_BODY_SECRET"]:
             assert secret in branch_text, f"{label}: original history lost {secret}"
         requests = [json.loads(line) for line in (output_dir / "requests.jsonl").read_text().splitlines()]
         assert len(requests) == 3, f"{label}: unexpected request count"
         assert "THINKING_SECRET" in json.dumps(requests[1]), f"{label}: model context lost thinking"
         assert "ROUTINE_RESULT_SECRET" in json.dumps(requests[1]), f"{label}: model context lost tool result"
+        assert "SKILL_BODY_SECRET" in json.dumps(requests[1]), f"{label}: model context lost skill instructions"
         permission = command("/fixture-permission")
         assert "PERMISSION_VISIBLE" in permission, f"{label}: permission dialog hidden"
         os.write(master, b"\r")
@@ -125,7 +137,7 @@ def run(mode, enabled, folder):
         resize(170)
         os.kill(process.pid, signal.SIGWINCH)
         wide = drain(0.5)
-        assert "TAREAS" in wide, f"{label}: sidebar not restored on resize"
+        assert "FOCUS_SIDEBAR_TEST" in wide, f"{label}: sidebar not restored on resize"
         command("/focus off")
         assert json.loads((agent_dir / "focus.json").read_text())["enabled"] is False
         command("/reload", 2)
@@ -149,7 +161,7 @@ def run(mode, enabled, folder):
             quit_output = output[before_quit:].decode("utf-8", errors="replace")
             assert "THINKING_SECRET" not in quit_output, f"{label}: quit printed unfiltered thinking"
         assert process.poll() is not None, f"{label}: quit did not exit"
-        return normalize(requests), {"case": label, "final_only": enabled, "history_intact": True, "permissions": True,
+        return normalize(requests), {"case": label, "final_only": enabled, "history_intact": True, "skill_names": enabled, "permissions": True,
                                      "resize": True, "sidebar": True, "reload": True}
     finally:
         # Keep raw diagnostics only on failure or when explicitly requested.
@@ -166,6 +178,9 @@ def run(mode, enabled, folder):
 with tempfile.TemporaryDirectory(prefix="pi-focus-pty-") as path:
     folder = Path(path)
     (folder / "fixture.txt").write_text("ROUTINE_RESULT_SECRET\n")
+    skill_dir = folder / "skills/fixture-folder"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: fixture-loaded-skill\ndescription: Fixture instructions\n---\nSKILL_BODY_SECRET\n")
     contexts = {}
     for mode in ["regular", "fullscreen"]:
         for enabled in [True, False]:

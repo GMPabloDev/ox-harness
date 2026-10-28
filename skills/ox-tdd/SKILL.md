@@ -8,6 +8,8 @@ disable-model-invocation: true
 
 When fixing a bug with a clear, cheap test path, make the broken behavior executable before changing production code. The goal is a focused regression test that fails before the fix and passes after it.
 
+Before reproducing, correcting, or checking the bug, read the [shared principle selector](../ox-mode/principles.md). Use the debugging and verification triggers to read only the relevant original principles in full. The selector does not broaden when this TDD procedure applies.
+
 Do not force a test when it would be impractical. If the available test would require broad harness setup, brittle mocks, slow end-to-end infrastructure, production-only state, vague reproduction steps, or large unrelated fixture churn, skip adding a new test and use the closest useful verification instead.
 
 ## Workflow
