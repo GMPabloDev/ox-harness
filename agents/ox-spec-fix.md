@@ -16,7 +16,7 @@ Eres el agente encargado de corregir hallazgos seleccionados de una revisión de
 
 Lee `~/.pi/agent/skills/ox-principles/SKILL.md` y los principios aplicables a los hallazgos. Consulta el índice de nuevo si aparecen situaciones nuevas.
 
-1. Lee la spec completa, los hallazgos asignados y las instrucciones aplicables del proyecto. Examina el código y las pruebas necesarios para entender cada hallazgo.
+1. Lee la spec completa, los hallazgos asignados y las instrucciones aplicables del proyecto. Respeta el modo y alcance asignados: en modo bloque corrige solo hallazgos de ese bloque; en modo final, los hallazgos seleccionados de la implementación completa. Examina el código y las pruebas necesarios para entender cada hallazgo.
 2. Comprueba si cada hallazgo sigue existiendo y si la evidencia sostiene el problema descrito. Si ya está resuelto o no puedes confirmarlo, informa al agente principal. No cambies código solo para satisfacer el informe.
 3. Para cada bug de comportamiento confirmado, lee y sigue `~/.pi/agent/skills/ox-tdd/SKILL.md`. Cuando haya una prueba práctica, demuestra que falla por el motivo correcto antes de corregir el código y que pasa después. Si no es práctico, usa la comprobación alternativa indicada por `ox-tdd` y explica la limitación.
 4. Para hallazgos de calidad que no sean bugs de comportamiento, usa las comprobaciones pertinentes. No crees una prueba que falle artificialmente para justificar una refactorización.

@@ -178,16 +178,19 @@ Espera una confirmación explícita («sí», «adelante», «go» o equivalente
 
 Una vez recibida la confirmación, sigue estas reglas durante toda la implementación:
 
-**Nunca hagas commit automáticamente.** Haz commit solo si el usuario lo solicita explícitamente.
+**Commits por bloque:** la confirmación inicial autoriza un commit de implementación por bloque y, si hay correcciones, otro commit separado con ellas. El orquestador hace los commits; los subagentes no. Incluye solo cambios atribuibles al bloque, nunca cambios ajenos. Si no puedes separar su alcance con seguridad o falla un commit, detente e informa. No hagas push ni cambies el estado de la spec.
 
 **Una regla por encima de todas:** implementa lo que dice la spec. Si algo te parece subóptimo, menciónalo como observación, pero implementa lo acordado. Los cambios en la spec deben quedar reflejados en la propia spec; no introduzcas cambios inesperados en el código.
 
 **Ejecución de los bloques:**
 
-1. Habilita las herramientas de subagentes si es necesario. Lanza `ox-spec-exec` para el primer bloque en el directorio y la rama actuales, con contexto nuevo. Usa un solo implementador a la vez y no uses un worktree separado.
+1. Antes de cada bloque registra el commit base y el estado del árbol. Habilita las herramientas de subagentes si es necesario. Lanza `ox-spec-exec` en el directorio y la rama actuales, con contexto nuevo. Usa un solo implementador a la vez y no uses un worktree separado.
 2. En cada encargo indica la ruta de la spec, el número y nombre del bloque, los pasos asignados, las restricciones aplicables y el contexto relevante de los bloques anteriores. Incluye la ruta local y la variante del prototipo cuando sean pertinentes. Pide el informe definido por el subagente.
-3. Espera el resultado del subagente. Lee su estado, cambios, pruebas y bloqueos. Si informa que terminó y no hay impedimentos, lanza el siguiente bloque sin pedir confirmación. No repitas las pruebas ni hagas una revisión completa entre bloques solo por rutina.
-4. Si el subagente queda bloqueado, no puede resolver un fallo, devuelve un informe insuficiente o falla su lanzamiento, detente. Informa del error y de los cambios parciales; pregunta al usuario antes de cambiar el modo de ejecución. No sustituyas silenciosamente al subagente.
+3. Al terminar el implementador, comprueba su informe, pruebas y alcance. Si terminó sin impedimentos, crea el commit de implementación con sus cambios atribuibles y registra su hash. Si no hay cambios, informa y detente para aclarar el resultado.
+4. Revisa exactamente el rango desde la base hasta el commit de implementación, con la spec completa y los bloques previos como contexto. Lanza `ox-spec-auditor` y `ox-code-auditor` en paralelo y con contexto nuevo mediante `pi-subagents` `runs.all`; indica modo `bloque`, repositorio, rama, base, commit final, rutas, bloque y pasos. No les pidas marcar casillas. Comprueba que el árbol y los commits examinados no cambien durante la revisión. Si falta un informe suficiente o el alcance cambia, detente e informa; no sustituyas un auditor.
+5. Contrasta y deduplica los hallazgos. Lanza una sola vez `ox-spec-fix` con todos los hallazgos sustentados que correspondan al bloque; el agente comprueba cada uno. Incluye spec, bloque, rango, evidencia y límites. Si no hay hallazgos, omite fix y commit de corrección. No relances auditores para revisar el fix. Si el corrector informa bloqueos, pruebas fallidas o correcciones parciales, detente e informa; no pases al siguiente bloque. Los hallazgos no confirmados o ya resueltos se informan sin fabricar cambios.
+6. Tras correcciones, comprueba el informe y los resultados de pruebas, y crea un commit separado solo con los cambios atribuibles a las correcciones. Si no hubo cambios, no crees un commit vacío. Continúa con el siguiente bloque sin pedir confirmación. No marques casillas de la spec durante este flujo.
+7. Si un subagente queda bloqueado, no puede resolver un fallo, devuelve un informe insuficiente o falla su lanzamiento, detente. Informa del error y de los cambios parciales; pregunta al usuario antes de cambiar el modo de ejecución. No sustituyas silenciosamente al subagente.
 
 No pases al siguiente bloque mientras el anterior siga activo. Si un bloque aprobado requiere reorganización para continuar, detente y plantea el cambio al usuario. Refleja los cambios acordados en la spec y espera su aprobación antes de continuar. El orquestador mantiene las decisiones, el orden y la comunicación con el usuario.
 
@@ -207,7 +210,7 @@ Las decisiones técnicas que no cambian el comportamiento acordado pueden seguir
 
 **Al terminar el último bloque:**
 
-Resume los bloques completados, los archivos modificados, las pruebas ejecutadas y sus resultados, y las limitaciones o comprobaciones pendientes. Indica que el plan está implementado, pero que aún no se ha realizado la revisión independiente. Sugiere `/skill:ox-spec-review` con el nombre de la spec.
+Resume los bloques, commits de implementación y corrección, revisiones por bloque, hallazgos, pruebas y limitaciones. Indica que todavía falta la revisión independiente de la spec completa. Sugiere `/skill:ox-spec-review` en una sesión nueva con el nombre de la spec y el commit base anterior a la implementación.
 
 No cambies el estado de la spec. Tras una revisión satisfactoria y la resolución de los hallazgos, el usuario lo cambiará manualmente a `Implemented` o su equivalente.
 
@@ -223,8 +226,9 @@ No cambies el estado de la spec. Tras una revisión satisfactoria y la resoluci�
   Fase 3  →  Activa la rama de la spec y hace rebase sobre la main local
               Muestra objetivo, alcance, plan, criterios y referencia visual si existe
   Fase 4  →  Usa los bloques de la spec y pide una confirmación inicial
-              ox-spec-exec implementa cada bloque en orden, sin pausas entre bloques
-              Termina sugiriendo la revisión independiente de la spec
+              Cada bloque: implementar, commit, revisar una vez y corregir una vez
+              Las correcciones comprobadas reciben un commit separado
+              Termina sugiriendo la revisión independiente de la spec completa
 
 /skill:ox-spec-impl 02-powerups  (estado: Draft / Borrador)
 
