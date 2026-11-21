@@ -16,7 +16,7 @@ import { cleanLine, record } from "./policy.ts";
 // Use exact palette colors, not interpolated shades. Named ox roles stay
 // distinct; other agents get a stable theme token from their name.
 const AGENT_COLORS: Record<string, ThemeColor> = {
-	"ox-scout": "toolDiffAdded",
+	"ox-explore": "toolDiffAdded",
 	"ox-researcher": "mdLink",
 };
 const AGENT_PALETTE: ThemeColor[] = ["accent", "toolDiffAdded", "mdLink", "syntaxType", "customMessageLabel", "syntaxFunction"];

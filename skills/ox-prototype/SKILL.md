@@ -26,35 +26,35 @@ Prototypes can precede specifications, inform them, or follow backend work. Insp
 
 ## 2. Set the direction and comparison
 
-Preserve the user's requirements in every variant. Inspect existing styles and relevant interactions before choosing a visual direction.
+Preserve the user's requirements in every variant. For visual prototypes, inspect the project's `brand/` directory and existing UI. Discover brand guidance, styles, and assets by their contents; no filenames or subdirectories are required. Reuse the actual palette, type, voice, icons, or mascot where the guidance calls for them. If `brand/` is absent or incomplete, reuse existing project styles. Ask about missing or conflicting direction only if it affects the decision; otherwise use a provisional fallback and disclose it. Leave `brand/` unchanged.
 
-If visual identity is not under review, reuse existing styles. If none exist, choose a provisional palette and state that assumption.
+If visual direction itself is open and affects the decision, gather references with available research tools and present a short selection of relevant directions. Skip this step when direction is already set.
 
-If visual direction is open and affects the decision, gather references with available research tools. Present a short selection of themes, palettes, and layouts for the user to choose. Skip this step when direction is already set.
-
-For a novel decision that needs comparison, build two or three meaningful alternatives. Keep the task, sample data, and unrelated styling consistent. Do not substitute color changes for different flows or layouts.
+For a novel decision that needs comparison, build two or three meaningfully different alternatives. Hold the task, sample data, and brand constant unless the experiment is testing one of them. Vary what the experiment is meant to compare. Prioritize the task and its feedback over unrelated decoration.
 
 Use one prototype when the direction is settled and only a specific behavior needs observation. Avoid lengthy plans and production specifications.
 
 ## 3. Build outside production source
 
-Create a new, dedicated directory under `prototypes/ox-prototype/<unique-name>/` at the repository root, or under the working directory if there is no repository. Do not overwrite another experiment or modify production source, configuration, or dependencies, except for the ignore rule below.
+Use `prototypes/` at the repository root, or in the working directory if there is no repository. If `prototypes/ox-prototype/` already exists, use it as the prototype base for compatibility; otherwise use `prototypes/` directly and do not create the legacy layer. Keep existing paths intact.
 
-Keep `prototypes/` out of Git. In a repository, use `git ls-files -- prototypes/` to check for tracked files and `git check-ignore --no-index` to check the intended prototype path. If tracked files exist, report them and ask the user before proceeding; do not remove them from the index. If the path is not ignored, add `/prototypes/` to the root `.gitignore`, preserving existing content, and verify the intended path with `git check-ignore --no-index`. If there is no repository, create or update `.gitignore` in the working directory without initializing Git, and verify the rule is present. If the applicable check fails, stop and report the problem.
+Group experiments by topic under that base, for example `prototypes/auth/` and `prototypes/product-catalog/`. If the topic already has an experiment, give the new one its own named subdirectory without overwriting existing files. Reuse existing navigation, sidebars, and footers where they fit. Use `<prototype-base>/shared/` only for elements reused across topics, not variant-specific UI. Reuse shared files as-is or add separate files; keep experiment-specific changes local so older prototypes keep working. Leave production source, configuration, and dependencies untouched.
+
+In a repository, run `git ls-files -- prototypes/` from the root. If any files are tracked, report them and ask before proceeding; leave the index untouched. Check the intended prototype path with `git check-ignore --no-index`. If it is not ignored, append `/prototypes/` to the local exclude file resolved by `git rev-parse --git-path info/exclude`, preserving existing entries and not duplicating the rule. Verify the intended path again with `git check-ignore --no-index`. If a check errors or the path still is not ignored, stop and report why; leave shared `.gitignore` files untouched. Outside a Git repository, skip the Git steps.
 
 For visual decisions, prefer plain HTML, CSS, and JavaScript or the lightest stack that represents the interaction faithfully. Use a minimal component environment only when the decision depends on that component. For behavioral decisions, write the smallest script that exercises the question.
 
-Use fake data and simulated responses. Do not connect to production services or use real credentials. Mark simulated behavior clearly.
+Use fake data and simulated responses. Do not connect to production services or use real credentials. Mark simulated behavior clearly. Skip speculative abstractions and test suites; implement only enough to evaluate the decision. Keep security and destructive actions outside the experiment.
 
-Skip reusable architecture, speculative abstractions, and test suites. Implement enough detail to evaluate the decision. Keep security and destructive actions outside the experiment.
+Put experiment controls in one labeled lab bar, separate from the product UI. Show `Variant` (A/B/C) when comparing alternatives, `Scenario` for relevant states, and `View as` when roles change what users see or can do. Omit controls that have nothing to compare. Keep each variant and scenario reachable without editing source.
 
-Put visual alternatives behind one labeled switcher. Keep each variant reachable without editing source. If a development server is needed, bind it to localhost and provide its URL.
+Make scenarios reproducible and interactive. For example, let the user select a save failure, fill out the form, press Save, and see the feedback and retry behavior in context. Simulate loading, empty data, or connection loss only where they affect the task. For role-dependent flows, show the specified differences in visibility and available actions; a simulated role is not an authorization check. If a development server is needed, bind it to localhost and provide its URL.
 
 ## 4. Observe the decision
 
 Use available browser or application tools to open each visual variant, exercise the relevant interaction, and capture screenshots. Check the viewport and input methods that matter to the task.
 
-Review UX only as needed for the question. Check the main task, feedback, error states, keyboard focus, or reduced motion when those affect the decision. A screenshot alone does not verify an interaction.
+Exercise the main task and each exposed scenario and role that affects the decision. Check the visible result or available action, not just that the selector changes. Check keyboard focus or reduced motion when relevant. A screenshot alone does not verify an interaction.
 
 For behavioral experiments, capture the output or timing under comparable conditions. Record what ran and any measurement limits. Do not generalize a toy experiment into a production performance claim.
 
@@ -75,6 +75,11 @@ Report:
 
 State plainly that the prototype code is throwaway and not ready for production. Preserve the chosen direction and evidence as references for later specification or implementation. Flag any backend contract changes the experiment suggests.
 
-When the user chooses a variant for a spec, offer to record the actual local path, variant, scope, and simulated behavior in that spec. Apply changes only with the user's confirmation. If the spec is already approved, use `ox-spec-revise` so it returns to `Draft` before approval again. Remind the user that `prototypes/` is ignored by Git and the local reference is not recoverable from the repository.
+If the experiment is tied to a spec, offer the next step based on the user's decision:
+
+- **Variant chosen:** record the actual local path, variant, scope, and simulated behavior. Update only the affected decisions, plan, and acceptance criteria.
+- **No variant chosen:** keep the decision open. If the evidence changed the question, offer to update the pending decision with what was learned, without adding requirements based on the recommendation.
+
+Apply spec updates only with the user's confirmation. If the spec is already approved, use `ox-spec-revise` so it returns to `Draft` before approval again. When recording a prototype link, note that the artifact is local and not recoverable from Git.
 
 Do not silently promote prototype code into production or treat your recommendation as user approval.

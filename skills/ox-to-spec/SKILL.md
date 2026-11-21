@@ -46,7 +46,7 @@ Haz todas las preguntas necesarias y agrupa las relacionadas cuando tenga sentid
 - **Alcance:** ¿Qué se incluye y qué NO? ¿Qué partes de la funcionalidad se posponen para otra spec?
 - **Datos y persistencia:** Si la funcionalidad introduce o modifica datos, aclara qué información necesita y si debe conservarse. Pregunta por la estructura o el almacenamiento solo cuando sea necesario para definir el comportamiento o cuando el usuario quiera tomar esa decisión.
 - **Integración:** ¿Esta funcionalidad depende de specs anteriores? ¿Modifica algo existente o solo añade elementos nuevos?
-- **UX y estados:** ¿Cómo se ve cuando funciona? ¿Cómo se ve cuando falla? ¿Existen estados intermedios?
+- **UX y estados:** ¿Qué necesita percibir y hacer el usuario cuando funciona, falla o hay estados intermedios?
 - **Riesgos:** ¿Qué podría fallar? ¿Qué sucede cuando el sistema funciona de forma degradada?
 - **Decisiones cerradas:** ¿Hay alguna decisión que el usuario ya tomó y no quiere volver a discutir?
 
@@ -57,9 +57,11 @@ Haz todas las preguntas necesarias y agrupa las relacionadas cuando tenga sentid
 - Si está disponible la herramienta `ask_user_question`, úsala para estos bloques en lugar de escribir las opciones como texto: así, el usuario elige en vez de escribir. Coloca primero tu recomendación e identifícala como tal.
 - Si detectas una respuesta que abriría la caja de Pandora (por ejemplo, «y también queremos multijugador»), señala que merece su propia spec y pregunta si la dejamos fuera del alcance de esta.
 
+**Decisiones visuales:** Aclara necesidades, comportamientos y restricciones, pero no obligues al usuario a elegir una presentación o interacción difícil de evaluar sin verla (por ejemplo, lista o tarjetas). Registra cada decisión de ese tipo como pendiente para `/skill:ox-prototype`, con su objetivo y restricciones conocidas, según `template.md`. No inventes una solución ni bloquees el borrador por esa elección. Respeta las decisiones visuales que el usuario ya haya confirmado. No prototipes durante esta skill.
+
 **Cuándo dejar de preguntar:**
 
-Detente cuando puedas responder estas tres preguntas sin hacer suposiciones:
+Detente cuando puedas responder estas tres preguntas sin hacer suposiciones, salvo las decisiones visuales registradas explícitamente como pendientes:
 
 1. ¿Qué comportamiento, alcance y restricciones debe cumplir la funcionalidad?
 2. ¿Cuál es el primer paso ejecutable y cuál es el último?
@@ -67,7 +69,7 @@ Detente cuando puedas responder estas tres preguntas sin hacer suposiciones:
 
 Investiga el proyecto para identificar los archivos pertinentes. Elige nombres de archivos y estructuras técnicas siguiendo sus convenciones; consulta al usuario solo si son parte de un requisito o afectan una decisión que necesita aprobar.
 
-Si todavía no puedes responder alguna, sigue preguntando.
+Si todavía no puedes responder alguna por una incertidumbre que no sea una decisión visual pendiente, sigue preguntando. Una spec permanece en `Draft` mientras tenga decisiones necesarias pendientes; no está lista para aprobar ni implementar.
 
 ### Fase 3 — Escribir la spec
 
@@ -106,14 +108,15 @@ Cuando el contenido esté listo (porque ya tenías toda la información):
    - La ruta del archivo creado.
    - Un recordatorio de que la spec está en estado `Draft`. Debe cambiarla a `Approved` después de volver a leerla.
    - Si acabas de crear `specs/.spec-config.yml`, menciona que existe y que `AutoCreateBranch` tiene `true` como valor predeterminado (puede cambiarse a `false` para controlar personalmente la creación de ramas).
-   - El siguiente paso: revisar la spec y cambiar su estado manualmente a `Approved`. Después, recuerda al usuario hacer commit de la spec y de la configuración nueva antes de ejecutar `/skill:ox-spec-impl NN-slug`. No hagas el commit automáticamente.
+   - Si hay decisiones visuales pendientes, indica la ruta de la spec y que puede abrir una sesión nueva con `/skill:ox-prototype` para explorarlas. Esa skill guía la vuelta al borrador tanto si el usuario elige una variante como si solo obtiene evidencia.
+   - Cuando la spec esté lista para aprobar, el usuario revisa y cambia el estado manualmente a `Approved`. Después, recuerda al usuario hacer commit de la spec y de la configuración nueva antes de ejecutar `/skill:ox-spec-impl NN-slug`. No hagas el commit automáticamente.
    - **Detente aquí.** No implementes la spec ni realices otra acción después de esta confirmación.
 
 ## Reglas estrictas
 
 - **Nunca escribas código durante este comando.** Escribe la spec y, si falta, crea la configuración inicial indicada en la Fase 4. No modifiques otros archivos.
 - **No implementes la spec después de guardarla.** Recuerda la aprobación y el commit manuales y menciona el comando siguiente. El usuario lo ejecutará cuando esté listo.
-- **Nunca supongas decisiones que el usuario no haya confirmado.** Si falta información, pregunta en la Fase 2, que es donde corresponden las preguntas.
+- **Nunca supongas decisiones que el usuario no haya confirmado.** Pregunta en la Fase 2 por la información necesaria, salvo las decisiones visuales que se registren pendientes para prototipar.
 - **No vuelvas a preguntar en la Fase 3 lo que ya se respondió en la Fase 2.** Si la información está completa, escribe la spec entera y guárdala. La confirmación sección por sección es una alternativa para cuando falta información, no el comportamiento predeterminado.
 - **Si el usuario quiere acelerar y omitir la Fase 2**, recuérdale: «Hacer preguntas ahora ahorra horas después. ¿Seguro que quieres omitirlas?». Si insiste, respeta su decisión, pero regístrala en la sección de decisiones de la spec («Definición rápida sin aclaraciones detalladas»).
 - **Si la funcionalidad parece demasiado grande**, explica qué partes o decisiones hacen difícil implementarla y verificarla como una sola entrega. Propón una división concreta y espera la decisión del usuario; no la dividas automáticamente.

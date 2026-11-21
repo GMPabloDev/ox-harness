@@ -131,8 +131,8 @@ describe("visual policy", () => {
 		expect(activityLabel("memory", "mem_save", { content: "PRIVATE_MEMORY_BODY" })).not.toContain("PRIVATE_MEMORY_BODY");
 	});
 	test("compacts only known successful custom notifications", () => {
-		expect(customActivity({ customType: "subagent-notify", details: { runs: [{ agent: "ox-scout", status: "completed" }] } })).toContain("ox-scout");
-		for (const status of ["failed", "paused", "stopped"]) expect(customActivity({ customType: "subagent-notify", details: { runs: [{ agent: "ox-scout", status }] } })).toBeUndefined();
+		expect(customActivity({ customType: "subagent-notify", details: { runs: [{ agent: "ox-explore", status: "completed" }] } })).toContain("ox-explore");
+		for (const status of ["failed", "paused", "stopped"]) expect(customActivity({ customType: "subagent-notify", details: { runs: [{ agent: "ox-explore", status }] } })).toBeUndefined();
 		for (const customType of ["subagent-supervisor-blocked", "subagent_watchdog_warning", "subagent_watchdog_clarification", "unknown"]) expect(customActivity({ customType })).toBeUndefined();
 		expect(customActivity({ customType: "subagent_supervisor_request", details: { reason: "need_decision" } })).toBeUndefined();
 	});
@@ -275,12 +275,12 @@ describe("real Pi components", () => {
 		const h = view();
 		h.chat.addChild(tool("web_search", { query: "Pi documentation" }));
 		h.chat.addChild(tool("mem_save", { content: "PRIVATE_MEMORY_BODY" }));
-		h.chat.addChild(tool("subagent", { agent: "ox-scout", task: "Revisar contrato visual" }));
-		h.chat.addChild(custom("subagent-notify", { runs: [{ agent: "ox-scout", status: "completed" }] }));
+		h.chat.addChild(tool("subagent", { agent: "ox-explore", task: "Revisar contrato visual" }));
+		h.chat.addChild(custom("subagent-notify", { runs: [{ agent: "ox-explore", status: "completed" }] }));
 		expect(h.text()).toContain("Web · Pi documentation");
 		expect(h.text()).toContain("Engram · save");
 		expect(h.text()).toContain("Revisar contrato visual");
-		expect(h.text()).toContain("ox-scout · terminado");
+		expect(h.text()).toContain("ox-explore · terminado");
 		expect(h.text()).not.toContain("PRIVATE_MEMORY_BODY");
 		expect(h.text()).not.toContain("INTERNAL_TOOL_RESULT");
 		expect(h.text()).not.toContain("CUSTOM_INTERNAL_BODY");
@@ -288,7 +288,7 @@ describe("real Pi components", () => {
 	});
 	test("does not compact failure notifications or supervisor questions", () => {
 		const h = view();
-		for (const component of [custom("subagent-notify", { runs: [{ agent: "ox-scout", status: "failed" }] }),
+		for (const component of [custom("subagent-notify", { runs: [{ agent: "ox-explore", status: "failed" }] }),
 			custom("subagent_supervisor_request", { reason: "need_decision" }), custom("subagent_watchdog_warning")]) {
 			h.chat.addChild(component);
 			expect(h.text()).toContain("CUSTOM_INTERNAL_BODY");
@@ -460,12 +460,12 @@ describe("subagent cards", () => {
 			width, themes.theme, { now }).lines);
 
 	test("gives each agent a stable color of its own", () => {
-		const scout = agentColor("ox-scout", themes.theme);
-		expect(agentColor("ox-scout", themes.theme)).toEqual(scout);
+		const scout = agentColor("ox-explore", themes.theme);
+		expect(agentColor("ox-explore", themes.theme)).toEqual(scout);
 		expect(agentColor("ox-researcher", themes.theme)).not.toEqual(scout);
 	});
 	test("uses exact theme colors instead of interpolated agent shades", () => {
-		expect(agentColor("ox-scout", themes.theme)).toEqual(themes.theme.colors.toolDiffAdded);
+		expect(agentColor("ox-explore", themes.theme)).toEqual(themes.theme.colors.toolDiffAdded);
 		expect(agentColor("ox-researcher", themes.theme)).toEqual(themes.theme.colors.mdLink);
 		const colors = Object.values(themes.theme.colors);
 		for (const name of ["custom-a", "custom-b", "custom-c"]) expect(colors).toContainEqual(agentColor(name, themes.theme));
@@ -521,10 +521,10 @@ describe("subagent cards", () => {
 	});
 	test("takes each parallel task from the launch arguments", () => {
 		const folder = runDir({ ...running, steps: [
-			{ ...running.steps[0], agent: "ox-scout", description: "[prompt redacted]" },
+			{ ...running.steps[0], agent: "ox-explore", description: "[prompt redacted]" },
 			{ ...running.steps[0], agent: "ox-researcher", description: "[prompt redacted]" },
 		] });
-		const text = render(folder, { workflow: "parallel", tasks: [{ agent: "ox-scout", task: "Explorar el código" }, { agent: "ox-researcher", task: "Buscar la versión" }] });
+		const text = render(folder, { workflow: "parallel", tasks: [{ agent: "ox-explore", task: "Explorar el código" }, { agent: "ox-researcher", task: "Buscar la versión" }] });
 		expect(text).toContain("Explorar el código");
 		expect(text).toContain("Buscar la versión");
 		expect(text).not.toContain("[prompt redacted]");
@@ -536,11 +536,11 @@ describe("subagent cards", () => {
 		expect(text).toContain("en marcha");
 	});
 	test("uses foreground results when the run did not detach", () => {
-		const text = plain(subagentCards({ agent: "ox-scout", task: "Explorar" }, { details: { results: [{
-			agent: "ox-scout", task: "Explorar", status: "completed", exitCode: 0, model: "opencode-go/mimo-v2.6-flash",
+		const text = plain(subagentCards({ agent: "ox-explore", task: "Explorar" }, { details: { results: [{
+			agent: "ox-explore", task: "Explorar", status: "completed", exitCode: 0, model: "opencode-go/mimo-v2.6-flash",
 			usage: { window: 2_000, output: 100, cost: { total: 0.01 } }, toolCalls: [{ name: "read", args: "/repo/src/file.ts" }],
 		}] } }, 110, themes.theme).lines);
-		for (const expected of ["ox-scout", "completado", "mimo-v2.6-flash", "ctx 2k", "$0.010", "read", "/repo/src/file.ts"]) expect(text).toContain(expected);
+		for (const expected of ["ox-explore", "completado", "mimo-v2.6-flash", "ctx 2k", "$0.010", "read", "/repo/src/file.ts"]) expect(text).toContain(expected);
 	});
 	test("renders the card inside the transcript and still hides the run body", () => {
 		const h = view();

@@ -43,13 +43,15 @@ Si el usuario eligió un prototipo, registra un enlace al archivo local, la vari
 ```markdown
 ## Referencia visual
 
-- Prototipo: [Catálogo](../prototypes/ox-prototype/catalogo/index.html)
+- Prototipo: [Catálogo](../prototypes/catalogo/index.html)
 - Variante elegida: opción B, cuadrícula con filtros laterales.
 - Alcance: distribución del catálogo y comportamiento visual de los filtros.
 - Simulaciones: los productos y resultados son datos ficticios.
 ```
 
 `prototypes/` se ignora en Git: el enlace necesita los archivos locales y no permite recuperarlos del repositorio. No inventes una variante ni una ruta. Si aún no hay una selección, no la presentes como aprobada.
+
+Para las decisiones de presentación o interacción que requieren explorar alternativas, incluye una subsección **Decisiones visuales pendientes**. Registra cada pregunta, su objetivo, las restricciones conocidas y `/skill:ox-prototype` como siguiente paso. Si ya hubo una prueba sin elección, resume la evidencia pertinente junto a la pregunta pendiente.
 
 ---
 

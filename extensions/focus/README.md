@@ -58,7 +58,7 @@ Focus no enumera las skills disponibles como si estuvieran cargadas. Detecta las
 
 Cada lanzamiento de `subagent` dibuja una tarjeta por agente, con dos columnas de margen interior y una fila vacía arriba y abajo. El fondo usa `customMessageBg`.
 
-El borde y el nombre usan colores exactos del tema, sin mezclarlos. `ox-scout` usa `toolDiffAdded` y `ox-researcher` usa `mdLink`. Otros nombres reciben un token estable del tema. La primera fila de contenido muestra el estado y el tiempo. En un terminal ancho, el modelo, el nivel de pensamiento, los tokens de contexto y de salida, el coste y el número de llamadas van a la derecha de esa fila. Después vienen la tarea y la última herramienta que usó el run, con la URL o la ruta cuando la herramienta es de web, lectura o búsqueda de archivos.
+El borde y el nombre usan colores exactos del tema, sin mezclarlos. `ox-explore` usa `toolDiffAdded` y `ox-researcher` usa `mdLink`. Otros nombres reciben un token estable del tema. La primera fila de contenido muestra el estado y el tiempo. En un terminal ancho, el modelo, el nivel de pensamiento, los tokens de contexto y de salida, el coste y el número de llamadas van a la derecha de esa fila. Después vienen la tarea y la última herramienta que usó el run, con la URL o la ruta cuando la herramienta es de web, lectura o búsqueda de archivos.
 
 Los datos salen del `status.json` que el run escribe en su `asyncDir`. La extensión lee ese archivo como mucho una vez por segundo y lo cachea por run. Mientras un run sigue activo, un temporizador de un segundo pide un repintado para que el tiempo y la actividad avancen. Un run terminado deja de refrescar y muestra el estado final.
 

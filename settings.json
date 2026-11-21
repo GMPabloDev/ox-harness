@@ -28,7 +28,7 @@
   "subagents": {
     "disableBuiltins": true,
     "agentOverrides": {
-      "ox-scout": {
+      "ox-explore": {
         "model": "openai-codex/gpt-6-luna",
         "thinking": "max"
       },
