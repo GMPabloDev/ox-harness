@@ -1,7 +1,8 @@
 // Offline, zero-cost provider used only by the real-PTY smoke test.
 import { appendFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createAssistantMessageEventStream, Type } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

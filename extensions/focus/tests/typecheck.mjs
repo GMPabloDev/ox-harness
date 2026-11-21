@@ -13,7 +13,7 @@ try {
 		compilerOptions: {
 			target: "ES2023", module: "NodeNext", moduleResolution: "NodeNext", strict: true,
 			noEmit: true, skipLibCheck: true, allowImportingTsExtensions: true,
-			paths: { "@earendil-works/*": [`${modules}/@earendil-works/*`] },
+			paths: { "@earendil-works/*": [`${modules}/@earendil-works/*`], typebox: [`${modules}/typebox`] },
 		},
 		files: ["index.ts", "view.ts", "policy.ts", "preferences.ts", "cards.ts", "tests/fixture.ts", "../tool-status/index.ts"].map(file => resolve(root, file)),
 	}));

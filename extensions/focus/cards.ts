@@ -18,7 +18,6 @@ import { cleanLine, record } from "./policy.ts";
 const AGENT_COLORS: Record<string, ThemeColor> = {
 	"ox-scout": "toolDiffAdded",
 	"ox-researcher": "mdLink",
-	"ox-reviewer": "syntaxFunction",
 };
 const AGENT_PALETTE: ThemeColor[] = ["accent", "toolDiffAdded", "mdLink", "syntaxType", "customMessageLabel", "syntaxFunction"];
 export const MEMORY_COLOR: ThemeColor = "mdCode";

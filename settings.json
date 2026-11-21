@@ -7,10 +7,11 @@
     "npm:pi-btw",
     "npm:pi-subagents@0.79.0"
   ],
-  "lastChangelogVersion": "1.4.0",
+  "lastChangelogVersion": "1.6.0",
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-6.1-sol",
+  "defaultModel": "gpt-6.1-terra",
   "modelThinkingLevels": {
+    "openai-codex/gpt-6.1-terra": "medium",
     "openai-codex/gpt-6-luna": "max",
     "openai-codex/gpt-6.1-sol": "high"
   },
@@ -28,17 +29,22 @@
     "disableBuiltins": true,
     "agentOverrides": {
       "ox-scout": {
-        "model": "opencode-go/mimo-v2.6-flash",
-        "thinking": "high"
+        "model": "openai-codex/gpt-6-luna",
+        "thinking": "max"
       },
       "ox-researcher": {
-        "model": "opencode-go/deepseek-v4.1-flash",
-        "thinking": "high"
+        "model": "openai-codex/gpt-6-luna",
+        "thinking": "max"
       },
-      "ox-reviewer": {
-        "model": "opencode-go/deepseek-v4.1-flash",
+      "ox-committer": {
+        "model": "openai-codex/gpt-6-luna",
         "thinking": "high"
       }
     }
+  },
+  "quietStartup": true,
+  "extensionChangelogVersions": {
+    "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.48.0",
+    "{\"source\":\"npm:pi-subagents@0.79.0\",\"scope\":\"user\"}": "0.79.0"
   }
 }

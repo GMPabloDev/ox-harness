@@ -3,8 +3,8 @@
   "private": true,
   "dependencies": {
     "gentle-engram": "0.3.0",
-    "pi-btw": "^0.8.0",
+    "pi-btw": "^0.8.1",
     "pi-subagents": "^0.79.0",
-    "pi-web-access": "^0.45.0"
+    "pi-web-access": "^0.48.0"
   }
 }

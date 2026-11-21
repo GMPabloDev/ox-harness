@@ -58,7 +58,7 @@ Focus no enumera las skills disponibles como si estuvieran cargadas. Detecta las
 
 Cada lanzamiento de `subagent` dibuja una tarjeta por agente, con dos columnas de margen interior y una fila vacía arriba y abajo. El fondo usa `customMessageBg`.
 
-El borde y el nombre usan colores exactos del tema, sin mezclarlos. `ox-scout` usa `toolDiffAdded`, `ox-researcher` usa `mdLink` y `ox-reviewer` usa `syntaxFunction`. Otros nombres reciben un token estable del tema. La primera fila de contenido muestra el estado y el tiempo. En un terminal ancho, el modelo, el nivel de pensamiento, los tokens de contexto y de salida, el coste y el número de llamadas van a la derecha de esa fila. Después vienen la tarea y la última herramienta que usó el run, con la URL o la ruta cuando la herramienta es de web, lectura o búsqueda de archivos.
+El borde y el nombre usan colores exactos del tema, sin mezclarlos. `ox-scout` usa `toolDiffAdded` y `ox-researcher` usa `mdLink`. Otros nombres reciben un token estable del tema. La primera fila de contenido muestra el estado y el tiempo. En un terminal ancho, el modelo, el nivel de pensamiento, los tokens de contexto y de salida, el coste y el número de llamadas van a la derecha de esa fila. Después vienen la tarea y la última herramienta que usó el run, con la URL o la ruta cuando la herramienta es de web, lectura o búsqueda de archivos.
 
 Los datos salen del `status.json` que el run escribe en su `asyncDir`. La extensión lee ese archivo como mucho una vez por segundo y lo cachea por run. Mientras un run sigue activo, un temporizador de un segundo pide un repintado para que el tiempo y la actividad avancen. Un run terminado deja de refrescar y muestra el estado final.
 
@@ -68,7 +68,7 @@ Sin `status.json`, la tarjeta usa el resultado del lanzamiento o, si aún no exi
 
 ## Compatibilidad y límites
 
-El adaptador está habilitado para Pi `1.4.x`. Usa el contenedor nativo del chat en los modos `regular` y `fullscreen`, sin sustituir el editor ni el contenedor del panel de tareas. Si la versión o la estructura no coinciden, la extensión muestra un aviso y conserva la vista normal.
+El adaptador está habilitado para Pi `1.x`. En cada arranque comprueba la estructura del contenedor del chat, no el número de versión menor: pasar de `1.4` a `1.5` no lo desactiva. Usa el contenedor nativo del chat en los modos `regular` y `fullscreen`, sin sustituir el editor ni el contenedor del panel de tareas. Si la versión mayor o la estructura no coinciden, la extensión muestra un aviso y conserva la vista normal. Después de actualizar Pi, ejecuta las pruebas PTY para confirmar que el filtrado sigue funcionando.
 
 Pi no expone una API pública para filtrar todo el chat. `view.ts` concentra el acceso a los componentes internos y crea una presentación separada para las respuestas. No modifica los mensajes originales. La limpieza restaura los métodos de los componentes al recargar o cambiar de sesión. Durante `/reload`, Pi desmonta las extensiones y puede mostrar brevemente la vista nativa antes de reinstalar el filtro.
 

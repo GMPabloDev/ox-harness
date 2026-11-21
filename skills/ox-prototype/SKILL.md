@@ -10,7 +10,7 @@ metadata:
 
 Use the prototype to choose a direction. Treat its code as disposable. Do not start production implementation as part of this workflow.
 
-Read the [shared principle selector](../ox-mode/principles.md) before choosing the comparison. Use the triggers for the open decision and read only the relevant original principles in full. A prototype needs its own authorization when the current task is definition only.
+A prototype needs its own authorization when the current task is definition only. For a novel decision that needs comparison, read `~/.pi/agent/skills/ox-principle-exhaust-the-design-space/SKILL.md`.
 
 ## 1. Name the decision
 
@@ -32,13 +32,15 @@ If visual identity is not under review, reuse existing styles. If none exist, ch
 
 If visual direction is open and affects the decision, gather references with available research tools. Present a short selection of themes, palettes, and layouts for the user to choose. Skip this step when direction is already set.
 
-For a novel decision covered by the principle, build two or three meaningful alternatives. Keep the task, sample data, and unrelated styling consistent. Do not substitute color changes for different flows or layouts.
+For a novel decision that needs comparison, build two or three meaningful alternatives. Keep the task, sample data, and unrelated styling consistent. Do not substitute color changes for different flows or layouts.
 
 Use one prototype when the direction is settled and only a specific behavior needs observation. Avoid lengthy plans and production specifications.
 
 ## 3. Build outside production source
 
-Use a new, dedicated directory at the user's chosen location. Otherwise, create `.scratch/ox-prototype/<unique-name>/` under the working directory. Do not overwrite another experiment or modify production source, configuration, or dependencies.
+Create a new, dedicated directory under `prototypes/ox-prototype/<unique-name>/` at the repository root, or under the working directory if there is no repository. Do not overwrite another experiment or modify production source, configuration, or dependencies, except for the ignore rule below.
+
+Keep `prototypes/` out of Git. In a repository, use `git ls-files -- prototypes/` to check for tracked files and `git check-ignore --no-index` to check the intended prototype path. If tracked files exist, report them and ask the user before proceeding; do not remove them from the index. If the path is not ignored, add `/prototypes/` to the root `.gitignore`, preserving existing content, and verify the intended path with `git check-ignore --no-index`. If there is no repository, create or update `.gitignore` in the working directory without initializing Git, and verify the rule is present. If the applicable check fails, stop and report the problem.
 
 For visual decisions, prefer plain HTML, CSS, and JavaScript or the lightest stack that represents the interaction faithfully. Use a minimal component environment only when the decision depends on that component. For behavioral decisions, write the smallest script that exercises the question.
 
@@ -69,8 +71,10 @@ Report:
 - Tradeoffs and the recommended direction.
 - The user's chosen direction, if they have selected one. Otherwise, label the recommendation as awaiting a decision.
 - Assumptions, simulated behavior, and remaining unknowns.
-- The scratch path and instructions to open or rerun the prototype.
+- The local prototype path and instructions to open or rerun it.
 
 State plainly that the prototype code is throwaway and not ready for production. Preserve the chosen direction and evidence as references for later specification or implementation. Flag any backend contract changes the experiment suggests.
+
+When the user chooses a variant for a spec, offer to record the actual local path, variant, scope, and simulated behavior in that spec. Apply changes only with the user's confirmation. If the spec is already approved, use `ox-spec-revise` so it returns to `Draft` before approval again. Remind the user that `prototypes/` is ignored by Git and the local reference is not recoverable from the repository.
 
 Do not silently promote prototype code into production or treat your recommendation as user approval.

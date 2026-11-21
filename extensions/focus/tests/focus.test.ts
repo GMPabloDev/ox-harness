@@ -463,12 +463,10 @@ describe("subagent cards", () => {
 		const scout = agentColor("ox-scout", themes.theme);
 		expect(agentColor("ox-scout", themes.theme)).toEqual(scout);
 		expect(agentColor("ox-researcher", themes.theme)).not.toEqual(scout);
-		expect(agentColor("ox-reviewer", themes.theme)).not.toEqual(agentColor("ox-researcher", themes.theme));
 	});
 	test("uses exact theme colors instead of interpolated agent shades", () => {
 		expect(agentColor("ox-scout", themes.theme)).toEqual(themes.theme.colors.toolDiffAdded);
 		expect(agentColor("ox-researcher", themes.theme)).toEqual(themes.theme.colors.mdLink);
-		expect(agentColor("ox-reviewer", themes.theme)).toEqual(themes.theme.colors.syntaxFunction);
 		const colors = Object.values(themes.theme.colors);
 		for (const name of ["custom-a", "custom-b", "custom-c"]) expect(colors).toContainEqual(agentColor(name, themes.theme));
 	});

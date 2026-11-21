@@ -1,105 +1,237 @@
 ---
 name: ox-spec-impl
-description: Implementa una SPEC aprobada por bloques, con commits locales y revisión final independiente, y ofrece integrarla en main con confirmación explícita.
+description: Implementa una spec aprobada en bloques consecutivos mediante el subagente ox-spec-exec, sin pausas entre bloques.
 disable-model-invocation: true
 ---
 
-# /skill:ox-spec-impl
+# /skill:ox-spec-impl — Implementador de specs aprobadas
 
-## Invocación y modos
+## Contexto de la sesión
 
-```text
-/skill:ox-spec-impl NN-slug [--block | --all]
+Antes de comenzar, usa `bash` para consultar `git status --short`, `git branch --show-current` y el listado de `specs/`. Si existe `specs/.spec-config.yml`, léelo con `read`. Si no existe, usa el valor predeterminado `AutoCreateBranch: true`.
+
+---
+
+## Instrucciones
+
+Sigue estas cuatro fases en orden estricto. **No avances a la siguiente fase si la anterior no se completó correctamente.** Consulta `~/.pi/agent/skills/ox-principles/SKILL.md` y lee los principios aplicables a cada fase.
+
+---
+
+### Fase 1 — Identificar la spec
+
+Pi añade los argumentos proporcionados por el usuario a las instrucciones de esta skill.
+
+Si no se proporcionó ningún argumento:
+
+- Enumera los archivos disponibles en `specs/` (ya aparecen arriba).
+- Pide al usuario que indique el nombre exacto de la spec.
+- Detente y espera una respuesta. No continúes.
+
+Si se proporcionó un argumento:
+
+- Busca el archivo en `specs/`. El usuario puede haber escrito el nombre completo (`01-mvp-arkanoid`), solo el número (`01`) o solo el slug (`mvp-arkanoid`). Intenta encontrar el archivo correcto en cualquiera de esos casos.
+- Si no encuentras el archivo, muestra las specs disponibles y pide al usuario que corrija el nombre.
+- Si lo encuentras, continúa con la Fase 2.
+
+---
+
+### Fase 2 — Validar el estado de la spec
+
+Lee el archivo de la spec que encontraste en la Fase 1 mediante la herramienta `read`.
+
+Dentro del archivo, busca la línea que contiene el estado de la spec. La etiqueta de la cabecera suele ser `**Status:**` (inglés) o `**Estado:**` (español), pero puede estar en cualquier idioma. Identifícala por su posición (la línea de estado cerca del inicio de la spec) y por el conjunto de estados utilizado, no únicamente por el texto exacto de la etiqueta.
+
+**Regla absoluta:** Solo puedes continuar si el estado **significa "Approved"**, independientemente del idioma utilizado.
+
+Considera cualquiera de los siguientes valores (y sus equivalentes en otros idiomas) como estado **Approved** y continúa:
+
+- Inglés: `Approved`
+- Español: `Aprobado`
+- Portugués: `Aprovado`
+- Francés: `Approuvé`
+- Alemán: `Genehmigt`
+- Italiano: `Approvato`
+- …o cualquier otra palabra que signifique claramente «aprobado» en otro idioma.
+
+Cualquier otro estado (`Draft` / `Borrador`, `In review` / `En revisión`, `Implemented` / `Implementado`, `Obsolete` / `Obsoleto` o cualquier valor no reconocido) significa que debes **detenerte** y mostrar el siguiente mensaje de error.
+
+| Categoría del estado                                     | Ejemplos (en cualquier idioma)                    | Acción                                                                   |
+| -------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------ |
+| Approved                                                 | `Approved`, `Aprobado`, `Aprovado`, `Approuvé`, … | Continuar con la Fase 3.                                                 |
+| Draft                                                    | `Draft`, `Borrador`, …                            | Detenerse. Mostrar el mensaje de error indicado abajo.                   |
+| In review                                                | `In review`, `En revisión`, …                     | Detenerse. Mostrar el mensaje de error indicado abajo.                   |
+| Implemented                                              | `Implemented`, `Implementado`, …                  | Detenerse. Mostrar el mensaje de error indicado abajo.                   |
+| Obsolete                                                 | `Obsolete`, `Obsoleto`, …                         | Detenerse. Mostrar el mensaje de error indicado abajo.                   |
+| No se encuentra la línea de estado / valor no reconocido | —                                                 | Detenerse. El archivo no sigue el formato esperado. Informar al usuario. |
+
+Si no tienes certeza de que un valor signifique «aprobado», **no hagas suposiciones**. Detente y pide al usuario que lo aclare o que actualice la spec con la denominación estándar.
+
+**Mensaje de error estándar cuando el estado no significa Approved:**
+
+```
+❌ No puedo implementar esta spec.
+
+Estado actual: [ESTADO ENCONTRADO]
+Solo trabajo con specs cuyo estado significa "Approved" (por ejemplo, `Approved`,
+`Aprobado` o el equivalente en otro idioma).
+
+Para continuar tienes dos opciones:
+  1. Si la spec está lista para implementarse, ábrela y cambia manualmente
+     su estado a "Approved" (o al término equivalente que utilice tu equipo).
+     Ese cambio lo realiza una persona, no el agente.
+  2. Si la spec todavía necesita ajustes, usa /skill:ox-spec-revise [nombre] para retomarla.
 ```
 
-Acepta número, slug o nombre del archivo en `specs/`, con o sin extensión. Localiza la SPEC y su rama local `spec-NN-slug` en el repositorio actual. Si falta la referencia, no encuentras la SPEC o hay varias candidatas, pide identificar una. Solicita corregir opciones desconocidas o modos incompatibles antes de modificar archivos.
+No ofrezcas alternativas ni sugieras «Puedo empezar de todos modos si quieres». Este bloqueo es intencional.
 
-| Modo | Ejecución | Pausa de revisión |
-| --- | --- | --- |
-| `--block`, predeterminado | Completa el siguiente bloque pendiente y sus validaciones. | Espera aprobación antes del siguiente bloque. |
-| `--all` | Completa todos los bloques pendientes y verifica la aceptación final. | Continúa entre bloques sin pedir aprobación. |
+---
 
-La invocación autoriza comenzar según el modo elegido, una vez resueltas las comprobaciones previas. Autoriza también los commits locales de los bloques y del cierre documental según las [reglas de ramas y commits](#reglas-de-ramas-y-commits). Un "continúa" en modo por bloques autoriza el siguiente bloque completo. Conserva el modo durante la sesión, salvo cambio explícito del usuario; en una nueva invocación sin opción, aplica `--block`.
+### Fase 3 — Crear la rama de Git y cambiar a ella
 
-El agente principal implementa, ejecuta las comprobaciones por bloque, revisa sus cambios, corrige y registra el progreso. Puede consultar a `ox-scout` para una pregunta de código local o a `ox-researcher` para una pregunta externa cuando falte evidencia necesaria. La revisión final independiente corresponde a `ox-reviewer`, con contexto nuevo y sin edición, según [la guía de revisión](review.md). El principal conserva las decisiones y la aceptación. No añadas un verificador por bloque ni delegues la implementación por rutina.
+Una vez confirmado que el estado significa `Approved`:
 
-Lee el [selector común de principios](../ox-mode/principles.md) al preparar la siguiente acción, también al reanudar. Antes de diseñar, ejecutar, probar o declarar terminado un resultado, usa los activadores de esa decisión y lee completos solo los originales pertinentes. Reconsidera la selección si cambia el riesgo, sin añadir controles por archivo ni alterar los bloques aprobados.
+0. **Comprueba primero el working tree.** Revisa la salida de `git status --short` en el contexto de la sesión anterior. Si **no está vacía**, detente, muestra los cambios pendientes y pregunta:
 
-## 1. Leer y comprobar
+   ```
+   ⚠️ Hay cambios sin commit en el working tree.
+   Al cambiar de rama, esos cambios se trasladarían a la otra rama. ¿Qué quieres hacer?
+     1. Haz commit o stash de los cambios por tu cuenta y vuelve a ejecutar este comando (recomendado).
+     2. Continuar de todos modos: los cambios se trasladarán a la nueva rama.
+   ```
 
-1. Identifica la raíz Git y aplica las [reglas de ramas y commits](#reglas-de-ramas-y-commits) y de [memoria](#memoria-en-engram). Lee las instrucciones y localiza la rama `spec-NN-slug`. Si falta, pide prepararla antes de continuar. Lee la SPEC completa de esa rama. Si aún no está activa, consulta el archivo con `git show spec-NN-slug:specs/NN-slug.md`. Si ya estás en ella, incluye sus cambios sin commit. Lee los contratos afectados y los fundamentos disponibles, como `docs/foundation.md`. Reutiliza sus acuerdos vigentes, no sus propuestas sin aprobar. Su ausencia no bloquea el flujo. Usa las herramientas disponibles del agente y responde en el idioma del usuario.
-2. Comprueba que el estado signifique `Aprobada`, `Aprobado`, `Approved` o su equivalente inequívoco antes de implementar. Una SPEC en `Implementada` o su equivalente inequívoco puede reanudarse solo para verificar su cierre y decidir su integración, si todos sus bloques y criterios figuran completos. Si no está aprobada ni cumple esa condición de cierre, informa del estado o la inconsistencia y pide resolverlo. Una aprobación explícita del usuario sobre la versión actual permite registrar ese estado después de activar la rama de la SPEC. La mera invocación de `/skill:ox-spec-impl` no aprueba una SPEC.
-3. Interpreta las secciones por su significado. `Datos y contratos relevantes` es opcional; cuando no exista, usa las reglas del comportamiento y las referencias vigentes. El diseño interno queda a criterio de la implementación dentro de esas restricciones. La ausencia de `Evidencia` en una SPEC antigua no impide empezar. Añádela al cerrar.
-4. Comprueba las relaciones `Depende de`, `Modifica` y `Reemplaza`. Identifica las capacidades necesarias y señala referencias rotas, contradicciones y decisiones pendientes que bloqueen la ejecución. La disponibilidad técnica se comprueba en la rama de trabajo durante la preparación.
-5. Identifica los bloques de `Plan de implementación`, sus tareas, resultados verificables y criterios `CA-NN` relacionados. Si un plan antiguo solo tiene pasos, trata cada paso principal como un bloque; conserva su estructura. Si faltan límites o resultados suficientes para ejecutar, pide concretarlos.
+   Espera la respuesta. **No hagas stash ni commit en nombre del usuario** a menos que te lo pida explícitamente. Si el working tree está limpio, pasa directamente al paso 1 sin mencionarlo.
 
-Comienza tareas solo cuando la SPEC esté aprobada y el siguiente bloque tenga requisitos suficientes. Si todos los bloques figuran completos, prepara el entorno y pasa a la verificación final para comprobarlo en el código.
+1. Obtén el nombre de la rama a partir del nombre completo del archivo de la spec, sin la extensión. Formato: `spec-NN-slug`. Ejemplos:
 
-## 2. Preparar la rama y reanudar
+   - `01-mvp-arkanoid.md` → rama `spec-01-mvp-arkanoid`
+   - `02-powerups.md` → rama `spec-02-powerups`
 
-1. Comprueba Git, la rama local `main`, la rama activa, el índice y los cambios existentes. Usa la raíz del repositorio en comandos y rutas. Resuelve cualquier impedimento antes de escribir archivos.
-2. Deriva `spec-NN-slug` del nombre de la SPEC. Usa la rama preparada por `/skill:ox-spec`. Si falta, detente y pide preparar esa rama con la SPEC antes de implementar. No continúes en la rama actual como alternativa.
-3. Si no está activa, usa `git switch spec-NN-slug` solo con el índice y el directorio de trabajo limpios. Si ya estás en ella, conserva sus cambios pendientes y comprueba que correspondan a la SPEC. Ante cambios ajenos, detente y pide resolverlos sin trasladarlos ni descartarlos. Confirma la rama antes de editar y relee desde ella la SPEC, las instrucciones, los fundamentos disponibles y los contratos afectados.
-4. Comprueba que las capacidades de las dependencias estén disponibles en el código de esa rama. Contrasta el progreso registrado con el código, el diff, las pruebas disponibles y, cuando ayude, el historial. Si llegaste con estado `Implementada` y encuentras contradicciones con ese cierre, informa y pide acordar la corrección antes de modificar el progreso o reabrir tareas. En una SPEC aprobada, corrige las marcas que contradigan la evidencia y reanuda la primera tarea pendiente del primer bloque incompleto. Si solo faltaba registrar trabajo ya realizado, verifica y actualiza el progreso.
-5. Si reanudas trabajo, identifica los commits ya guardados de la SPEC. Si un bloque verificado conserva cambios sin commit, comprueba que su validación siga vigente y guarda ese cierre antes de avanzar. Reutiliza los commits existentes según las reglas de commits.
-6. Guarda en Engram el resumen de inicio o reanudación, con el estado leído, la rama, el modo y el bloque pendiente. Si una comprobación previa bloquea el inicio, registra el impedimento sin afirmar que comenzaste a implementar.
+2. Lee el flag `AutoCreateBranch` de la **configuración de creación de ramas** mostrada en el contexto de la sesión anterior.
 
-Con las dependencias y el entorno disponibles y el progreso comprobado, comunica brevemente la SPEC, la rama, la raíz del repositorio, el modo y el bloque de reanudación. Comienza sin otra confirmación. No cambies de rama ni inicies otra implementación en esta carpeta mientras haya agentes, pruebas o comandos activos.
+   - Si el archivo de configuración no existe, falta el valor o no se reconoce → interprétalo como `true` (valor predeterminado).
+   - Solo un `false` explícito (sin importar las mayúsculas y minúsculas) desactiva la creación automática de ramas.
 
-## 3. Ejecutar y validar cada bloque
+   **Si `AutoCreateBranch` es `true` (predeterminado):** continúa sin preguntar.
 
-1. Identifica el siguiente bloque pendiente, su resultado verificable y los criterios `CA-NN` exigibles. Para cambiar un requisito o resolver una ambigüedad que afecte al resultado, presenta opciones concretas y espera la decisión del usuario. Refleja el acuerdo en la SPEC antes de continuar y, si modifica una decisión global, actualiza también los fundamentos afectados. Una contradicción entre la SPEC y un acuerdo global requiere resolver la diferencia con el usuario, no elegir uno silenciosamente.
-2. Decide la estructura y la implementación dentro del alcance y los contratos aprobados. Implementa directamente el bloque. No impongas un orden entre escribir código y pruebas, salvo que el usuario o las instrucciones del proyecto lo exijan. No amplíes requisitos por tu cuenta.
-3. Comprueba el comportamiento observable contra los criterios de aceptación y ejecuta las validaciones exigidas por la SPEC y el repositorio. Añade o ajusta pruebas cuando hagan falta para comprobar ese comportamiento o evitar regresiones, sin fijar detalles internos ajenos al contrato. No crees un test ni ejecutes toda la suite por cada subtarea por costumbre. Usa comprobaciones pertinentes al bloque, sin omitir las obligatorias. Revisa el diff y los archivos nuevos. Confirma y corrige los bugs según [la regla de corrección](review.md#confirmar-y-corregir-hallazgos), dentro del alcance, y distingue los fallos previos que puedas demostrar.
-4. Actualiza en la misma SPEC las tareas realizadas y los criterios `CA-NN` efectivamente verificados. Conserva sin marcar los que fallen o no puedas comprobar y registra el impedimento junto al elemento correspondiente. Anota junto al bloque los comandos, los resultados observados y las limitaciones de la verificación. Mantén el estado `Aprobada` mientras la implementación esté parcial o falte aceptación.
-5. Da el bloque por verificado cuando su resultado verificable esté comprobado y sus validaciones obligatorias hayan pasado. Si algo queda bloqueado, registra el impedimento en la SPEC y en Engram y detente antes de avanzar.
-6. Guarda los cambios del bloque y el progreso de la SPEC en uno o varios commits locales según las reglas de commits. Confirma el resultado y los hashes antes de continuar. Si no puedes guardar el cierre, registra lo pendiente en la SPEC y en Engram y detente. Una restricción explícita del usuario permite continuar sin commit, comunicando ese pendiente.
-7. Guarda en Engram el resultado, las validaciones, los commits y el siguiente paso. Comunica el resultado, los cambios principales, las validaciones y los commits locales. En `--block`, si quedan bloques, muestra el siguiente y espera aprobación. En `--all`, continúa directamente con el siguiente bloque. Tras el último, pasa a la verificación final sin una aprobación adicional.
+   - Si la rama **no existe**, créala con `git checkout -b spec-NN-slug`.
+   - Si **ya existe**, cambia a esa rama. Después del rebase del paso 3, consulta el historial, los cambios y las pruebas pertinentes para proponer el punto de reanudación. Espera la confirmación del usuario antes de implementar.
+   - En ambos casos, cambia a la rama con `git checkout spec-NN-slug` y confirma que el cambio se realizó correctamente antes de continuar.
 
-Usa los bloques aprobados como unidades coherentes, no como un cierre por cada archivo o cambio pequeño. No los fragmentes por tu cuenta para añadir controles. En una migración, respeta las roturas temporales y los límites de verificación acordados, sin exigir compatibilidad provisional para cada paso interno. Si el plan no permite comprobar el resultado o necesita otros límites, acuerda su ajuste antes de continuar.
+   **Si `AutoCreateBranch` es `false`:** pregunta antes de modificar el estado de Git. Muestra:
 
-Un bloqueo técnico justifica detenerse cuando no puedas resolverlo dentro del alcance o necesites acceso, información o una decisión del usuario. El modo completo conserva las mismas exigencias de validación, seguridad y compatibilidad. Las ampliaciones de alcance requieren un acuerdo explícito y su actualización en la SPEC, o una SPEC aparte cuando sean independientes.
+   ```
+   AutoCreateBranch está configurado en false.
+   ¿Crear y cambiar a la rama spec-NN-slug? [y/N]
+   ```
 
-Al pausar o interrumpir el trabajo, deja registrados en la SPEC el bloque, lo realizado, las validaciones ejecutadas y cualquier impedimento. Si hay una comprobación pendiente, indica qué falta y el siguiente paso. Distingue lo guardado en commits de lo que permanece sin commit. Guarda ese resumen en Engram si aún puedes usar las herramientas y el último guardado no cubre esos datos. Usa las tareas existentes como punto de reanudación, sin crear un sistema de seguimiento paralelo.
+   - Si el usuario responde **sí**, crea la rama o cambia a ella exactamente como en el caso `true` anterior.
+   - Si responde **no** o deja la respuesta vacía, **no crees ninguna rama**. Indica que implementarás en la rama actual (la que aparece en el contexto de la sesión anterior) y solicita confirmación explícita para continuar allí. No improvises: espera la respuesta.
 
-## 4. Verificar la aceptación y cerrar
+3. **Actualiza la rama de la spec con la `main` local.** Si estás en `spec-NN-slug`, comprueba que existe `refs/heads/main`, que no hay operaciones Git en curso y que `git status --porcelain` está vacío. Si alguna comprobación falla, detente e informa; no hagas stash ni descartes cambios. Esto también se aplica si antes elegiste continuar con cambios pendientes.
 
-1. Comprueba todos los criterios de aceptación contra el resultado integrado. Reutiliza evidencia vigente de los bloques cuando los cambios posteriores no la invaliden y ejecuta las comprobaciones finales exigidas por la SPEC y el repositorio. Si reanudaste una SPEC en `Implementada` y no puedes confirmar su aceptación, informa, registra el impedimento en Engram y detente sin reabrirla ni ofrecer integración.
-2. Lee completa [la guía de revisión y corrección](review.md). Encarga a `ox-reviewer` la revisión del cambio acumulado frente al ancestro común de la rama y `main`, incluidos los cambios sin commit y los archivos nuevos pertinentes. Confirma los hallazgos antes de corregirlos y pide una revisión enfocada después de los arreglos. Reutiliza una revisión anterior solo si su cobertura y evidencia siguen vigentes. No sustituyas una revisión fallida o incompleta por autorrevisión. Si reanudaste una SPEC en `Implementada` y hacen falta cambios, informa y acuerda su reapertura antes de corregir. Una validación no ejecutable permanece pendiente, con su motivo.
-3. Marca la SPEC como `Implementada`, o su equivalente en el proyecto, solo cuando todos los bloques y criterios estén completos, las comprobaciones exigidas hayan pasado y la revisión independiente tenga cobertura suficiente sin fallos confirmados pendientes dentro del alcance. En otro caso, conserva `Aprobada` y comunica exactamente qué falta. Si reanudaste un cierre en `Implementada` que no puedes confirmar, aplica la detención del paso 1 sin reabrirlo por tu cuenta.
-4. Con la aceptación completa, lee las [reglas de la evidencia](../ox-spec/template.md#reglas-de-la-evidencia) y completa `Evidencia` con los commits comprobados y las verificaciones reales. Resume la revisión independiente, la versión revisada y la resolución de los hallazgos en las verificaciones existentes. Añade la sección si falta en una SPEC antigua, sin reestructurar el resto del documento. Sustituye el texto de pendiente por el resultado de la aceptación final.
-5. Guarda la SPEC en un commit documental de cierre, separado de los cambios de implementación, solo cuando la aceptación esté completa. Aplica las reglas de commits y reutiliza el cierre existente si no hay cambios nuevos. Una restricción explícita del usuario mantiene el documento sin commit y debe figurar como pendiente.
-6. Guarda en Engram el resultado de la verificación final, los commits verificados y los pendientes. Distingue la implementación validada de su integración o despliegue. Entrega el resumen del resultado, la rama utilizada, las validaciones, los commits locales y cualquier pendiente. Mantén la rama de la SPEC activa hasta una decisión explícita de integración. El cierre no autoriza push, merge ni despliegue.
+   Guarda la referencia de `HEAD`, el hash de la `main` local y una huella del contenido de la spec aprobada. Ejecuta `git rebase refs/heads/main` sin preguntar. No hagas fetch ni uses una rama remota. Si el rebase falla o hay conflictos, detente y muestra el estado y el error. No resuelvas conflictos, abortes el rebase ni reescribas más historial por tu cuenta.
 
-## 5. Ofrecer integración en main
+   Al terminar, confirma la rama activa y vuelve a leer la spec. Si falta o su contenido difiere de la versión aprobada antes del rebase, detente y solicita al usuario que revise y apruebe la versión actual antes de continuar. No deduzcas que sigue aprobada solo por su estado.
 
-Si el usuario detecta un bug antes de integrar, suspende la oferta y sigue [el procedimiento de corrección y revisión](review.md#resolver-bugs-antes-de-integrar). Ofrece integrar de nuevo solo después de resolverlo y completar la aceptación de la versión corregida.
+   Si el usuario eligió permanecer en `main`, no hagas rebase de `main` sobre sí misma. Si eligió otra rama actual que no sea la rama de la spec, pregunta antes de hacer rebase en ella.
 
-1. Ofrece este paso solo con la aceptación completa y el cierre documental confirmado, también en `--all`. Si quedan validaciones o commits pendientes, comunica el impedimento sin ofrecer integrar. Si el repositorio exige PR u otra vía incompatible con un merge local, explica el requisito sin publicar nada por tu cuenta.
-2. Muestra la rama real `spec-NN-slug`, el destino `main` y sus hashes completos comprobados. Pregunta si quiere integrar localmente, revisar antes de decidir o dejar la integración pendiente. Revisar muestra el resumen, los commits y el diff, pero no autoriza el merge. Espera una elección explícita. Ni la invocación, ni un "continúa", ni `--all` la sustituyen.
-3. Solo si elige integrar, comprueba de nuevo las puntas acordadas, la rama activa y el estado completo de Git. Exige el índice y el directorio limpios, sin operaciones pendientes ni otros agentes o comandos activos. Si las puntas cambiaron, presenta las nuevas y pide confirmar otra vez. Si el origen ya es ancestro de `main`, compruébalo con `git merge-base --is-ancestor` y pasa al resumen del paso 7. Comunica que ya está integrado, sin preparar otro merge ni crear un commit.
-4. Activa `main` con `git switch main` en esta misma carpeta y comprueba que `HEAD` siga en el hash acordado. Prepara `git merge --no-ff --no-commit <hash-origen>` con el hash confirmado, no una referencia que pueda moverse. `HEAD` debe seguir en el commit inicial de `main` y `MERGE_HEAD` debe identificar el origen acordado.
-5. Revisa el diff del índice y ejecuta `git hook run --ignore-missing pre-merge-commit`. Un fallo impide continuar. Revisa cualquier cambio del hook y prepara el entorno de validación. Comprueba que los archivos rastreados coincidan con el índice y conserva el árbol preparado con `git write-tree`. Ejecuta las comprobaciones del repositorio y los criterios afectados sobre el resultado combinado. Las pruebas de la rama de origen no sustituyen esta validación. Detente si las pruebas cambian archivos o el índice.
-6. Confirma el commit de merge solo si las comprobaciones pasan, las puntas siguen siendo las acordadas y el árbol preparado coincide con el validado. Aplica las reglas de commits con `SPEC: NN-slug`, sin añadir otros archivos para completar la integración. Comprueba el hash real, sus dos padres, el árbol y el estado final. El primer padre debe ser la punta acordada de `main` y el segundo, el origen confirmado. Deja `main` activa tras una integración correcta.
-7. Guarda la decisión y el resultado en Engram, tanto si se integra como si queda pendiente o bloqueada. Comunica origen, destino, rama activa, comprobaciones y hash de integración verificado, si existe. No añadas estados ni registros de integración a la SPEC. No hagas push, borres ramas ni despliegues como continuación del merge.
+4. Confirma visualmente al usuario que la spec está lista e indica qué rama está activa:
 
-Ante conflictos, comprobaciones fallidas o un fallo de commit, no confirmes la integración. Si el merge sigue en curso, comenzó limpio y solo contiene cambios propios, usa `git merge --abort`. Comprueba que `main` conserva su commit inicial y vuelve a la rama de la SPEC solo si la carpeta está limpia. Si hay cambios de procedencia incierta o no puedes abortar con seguridad, conserva el estado e informa sin usar reset, clean ni stash. Si el commit ya se creó, no lo deshagas ni reescribas historial. Comunica el hash y cualquier validación fallida sin presentar el resultado como validado. Las correcciones se realizan en la rama de la SPEC y requieren otra validación y confirmación antes de reintentar.
+   ```
+   ✅ Listo para implementar.
 
-## Reglas de ramas y commits
+   Spec:   specs/NN-slug.md
+   Rama:   spec-NN-slug  (activa)   (← o la rama actual si no se creó otra)
+   Estado: Approved     (← muestra el valor real encontrado en la spec)
+   ```
 
-- Usa Git con al menos un commit y una rama local `main`. Si falta esa preparación, detente y pide resolverla. `main` es la rama principal y la base de las ramas `spec-NN-slug`. No inicialices Git ni cambies la base por tu cuenta.
-- Implementa y registra el progreso solo en `spec-NN-slug`, nunca directamente en `main`. La única excepción es el merge autorizado descrito arriba. No recrees la rama ni actualices su base automáticamente. Una configuración antigua no desactiva esta regla.
-- Consulta el estado completo de Git antes de cambiar de rama, escribir o guardar un commit. Un diff vacío no descarta una operación en curso. Detente ante un merge, rebase, cherry-pick o revert ajeno al intento de integración autorizado. No lo completes ni lo abortes por tu cuenta. Conserva los cambios existentes, sin stash, descartes ni reescrituras de historial. Mantén un único escritor en la carpeta.
-- La invocación autoriza los commits locales de bloques y cierre, salvo restricción explícita del usuario. Agrupa cambios coherentes, no tareas individuales ni cantidades fijas. Un bloque puede tener varios commits. Un commit no aprueba requisitos ni autoriza publicar, integrar o desplegar. Push, merge y despliegue requieren autorización explícita.
-- Antes de cada commit, confirma la rama y revisa el estado, el diff del directorio, el diff del índice y los archivos nuevos. Añade solo rutas o fragmentos de la SPEC, incluido su progreso. Un índice con cambios ajenos obliga a detenerse sin modificar ese trabajo. Excluye secretos y datos sensibles. Ante un posible secreto, detente sin reproducirlo. Revisa el diff preparado antes de confirmar.
-- Sigue las convenciones de mensajes del repositorio. Si faltan, usa Conventional Commits con un resumen breve en imperativo. Incluye `SPEC: NN-slug` y `Block: N` en el cuerpo. Enumera los bloques afectados si son varios. Los commits documentales de cierre e integración solo necesitan la referencia a la SPEC.
-- Comprueba el resultado del commit y su hash real antes de comunicarlo o guardarlo como evidencia. Si un hook cambia contenido validado, revísalo y repite las comprobaciones afectadas. Un fallo deja el cierre pendiente y detiene el avance. No saltes hooks ni cambies la identidad o configuración de Git para continuar.
-- Al reanudar, reutiliza los commits existentes. Crea otro solo si hay cambios nuevos. Corrige mediante nuevos commits, sin amend, rebase ni otra reescritura por iniciativa propia.
+5. **Todavía no empieces a implementar.** Primero muestra un resumen de la spec al usuario para que tenga presentes sus detalles. Extrae y muestra:
+   - El **objetivo** (la línea después de `**Objective:**` / `**Objetivo:**` / una etiqueta equivalente).
+   - El **alcance** (la sección `## Scope` / `## Alcance` / equivalente).
+   - El **plan de implementación** (la sección con bloques y pasos: `## Implementation plan` / `## Plan de implementación` / equivalente).
+   - Los **criterios de aceptación** (el checklist: `## Acceptance criteria` / `## Criterios de aceptación` / equivalente).
+   - La **referencia visual**, si existe: ruta local, variante elegida, alcance y simulaciones.
 
-## Memoria en Engram
+Si la spec referencia un prototipo, resuelve la ruta desde el directorio de la spec y comprueba que existe. Si falta, no se identifica la variante o contradice la spec, detente y pregunta al usuario. No inventes el diseño ni trates los datos simulados como comportamiento real. Los prototipos se ignoran en Git y pueden faltar en otra copia.
 
-- Si Engram está disponible, consulta la memoria relevante al iniciar. Comprueba el proyecto con `mem_current_project` usando la raíz del repositorio como `cwd` y conserva esa raíz en los guardados. La SPEC y el código comprobados prevalecen sobre recuerdos desactualizados.
-- Usa `mem_save` con `topic_key: "spec/NN-slug/status"` para el resumen de estado. Incluye objetivo, ruta, estado leído, rama, modo, bloque, decisiones y siguiente paso. Añade validaciones reales, hashes verificados y bloqueos cuando existan. Para integración, registra origen, destino, decisión y resultado. Conserva las decisiones duraderas en recuerdos separados.
-- Guarda al iniciar o reanudar, completar un bloque, registrar un bloqueo o interrupción, terminar la aceptación y registrar la decisión o resultado de integración. No guardes cada tarea ni copies la SPEC completa, secretos o salidas extensas. Una recomendación no es una decisión aprobada.
-- Lee la aprobación del archivo al iniciar implementación. Contrasta el progreso con el código antes de actualizarlo. No uses la memoria para aprobar requisitos, marcar tareas sin evidencia ni crear un registro paralelo de aprobaciones.
-- Si Engram falla o no resuelve el proyecto, conserva el progreso en la SPEC e informa del pendiente sin bloquear el trabajo ni afirmar que el guardado tuvo éxito. Sigue el protocolo global para escrituras inciertas y el resumen de sesión.
+Identifica las cabeceras por su significado, no por su redacción exacta: la spec puede estar escrita en cualquier idioma.
+
+---
+
+### Fase 4 — Implementar por bloques
+
+Después de mostrar el resumen de la spec, identifica los bloques definidos en el plan aprobado. Conserva sus nombres, pasos, orden y dependencias.
+
+Si una spec anterior a este formato solo contiene pasos, propone una agrupación sin alterar el plan ni sus requisitos. No reescribas la spec por tu cuenta.
+
+Muestra los bloques al usuario y dile:
+
+```
+Voy a implementar estos bloques en orden con ox-spec-exec, sin pausas entre ellos.
+Me detendré si necesito una decisión o si encuentro un bloqueo.
+
+¿Comenzamos?
+```
+
+Espera una confirmación explícita («sí», «adelante», «go» o equivalente). No empieces sin ella. Para una spec antigua, esta misma confirmación autoriza la agrupación propuesta.
+
+Una vez recibida la confirmación, sigue estas reglas durante toda la implementación:
+
+**Nunca hagas commit automáticamente.** Haz commit solo si el usuario lo solicita explícitamente.
+
+**Una regla por encima de todas:** implementa lo que dice la spec. Si algo te parece subóptimo, menciónalo como observación, pero implementa lo acordado. Los cambios en la spec deben quedar reflejados en la propia spec; no introduzcas cambios inesperados en el código.
+
+**Ejecución de los bloques:**
+
+1. Habilita las herramientas de subagentes si es necesario. Lanza `ox-spec-exec` para el primer bloque en el directorio y la rama actuales, con contexto nuevo. Usa un solo implementador a la vez y no uses un worktree separado.
+2. En cada encargo indica la ruta de la spec, el número y nombre del bloque, los pasos asignados, las restricciones aplicables y el contexto relevante de los bloques anteriores. Incluye la ruta local y la variante del prototipo cuando sean pertinentes. Pide el informe definido por el subagente.
+3. Espera el resultado del subagente. Lee su estado, cambios, pruebas y bloqueos. Si informa que terminó y no hay impedimentos, lanza el siguiente bloque sin pedir confirmación. No repitas las pruebas ni hagas una revisión completa entre bloques solo por rutina.
+4. Si el subagente queda bloqueado, no puede resolver un fallo, devuelve un informe insuficiente o falla su lanzamiento, detente. Informa del error y de los cambios parciales; pregunta al usuario antes de cambiar el modo de ejecución. No sustituyas silenciosamente al subagente.
+
+No pases al siguiente bloque mientras el anterior siga activo. Si un bloque aprobado requiere reorganización para continuar, detente y plantea el cambio al usuario. Refleja los cambios acordados en la spec y espera su aprobación antes de continuar. El orquestador mantiene las decisiones, el orden y la comunicación con el usuario.
+
+**Si durante la implementación encuentras una ambigüedad** que afecta al comportamiento o al alcance y que la spec no resuelve:
+
+- Detente y describe la ambigüedad con precisión.
+- Presenta opciones concretas y espera la decisión del usuario. No improvises requisitos.
+- Si la decisión cambia lo aprobado, refléjala en la spec y espera su aprobación antes de continuar.
+
+Las decisiones técnicas que no cambian el comportamiento acordado pueden seguir las convenciones del proyecto sin consultar al usuario.
+
+**Si el usuario pide algo fuera del alcance de la spec:**
+
+- Recuérdale que queda fuera del alcance de esta spec.
+- Sugiere anotarlo para la próxima spec.
+- No lo implementes en esta rama.
+
+**Al terminar el último bloque:**
+
+Resume los bloques completados, los archivos modificados, las pruebas ejecutadas y sus resultados, y las limitaciones o comprobaciones pendientes. Indica que el plan está implementado, pero que aún no se ha realizado la revisión independiente. Sugiere `/skill:ox-spec-review` con el nombre de la spec.
+
+No cambies el estado de la spec. Tras una revisión satisfactoria y la resolución de los hallazgos, el usuario lo cambiará manualmente a `Implemented` o su equivalente.
+
+---
+
+## Resumen del comportamiento esperado
+
+```
+/skill:ox-spec-impl 01-mvp-arkanoid
+
+  Fase 1  →  Encuentra specs/01-mvp-arkanoid.md
+  Fase 2  →  Lee el estado → "Approved" (o "Aprobado", etc.) → ✅ continúa
+  Fase 3  →  Activa la rama de la spec y hace rebase sobre la main local
+              Muestra objetivo, alcance, plan, criterios y referencia visual si existe
+  Fase 4  →  Usa los bloques de la spec y pide una confirmación inicial
+              ox-spec-exec implementa cada bloque en orden, sin pausas entre bloques
+              Termina sugiriendo la revisión independiente de la spec
+
+/skill:ox-spec-impl 02-powerups  (estado: Draft / Borrador)
+
+  Fase 1  →  Encuentra specs/02-powerups.md
+  Fase 2  →  Lee el estado → "Draft" → ❌ se detiene
+              Muestra el mensaje de error estándar
+              No crea ninguna rama ni modifica el código
+```
+
+**La creación de ramas se controla mediante el flag `AutoCreateBranch`** del archivo `specs/.spec-config.yml`. Su valor predeterminado es `true` (crear automáticamente la rama, como se muestra arriba). Cámbialo a `false` para que la Fase 3 solicite confirmación `[y/N]` antes de crearla.

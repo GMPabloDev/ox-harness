@@ -6,6 +6,7 @@
 !/agents/
 !/skills/
 !/prompts/
+!/rules/
 !/extensions/
 !/settings.json
 !/npm/

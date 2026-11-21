@@ -5,6 +5,11 @@ import type { TUI } from "@earendil-works/pi-tui";
 import { loadPreference, savePreference } from "./preferences.ts";
 import { findChat, FocusView } from "./view.ts";
 
+// The transcript layout is verified structurally on every start, so minor Pi
+// updates do not disable Focus. A new interface generation still falls back to
+// the native view instead of filtering a layout nobody has checked.
+const COMPATIBLE = /^1\./;
+
 export function installFocus(pi: ExtensionAPI, preferencePath: string) {
 	let preference = loadPreference(preferencePath);
 	let view: FocusView | undefined;
@@ -39,7 +44,7 @@ export function installFocus(pi: ExtensionAPI, preferencePath: string) {
 		// disposal on reload. It does not replace the editor, footer or sidebar.
 		ctx.ui.setWidget("focus-lifecycle", current => {
 			tui = current;
-			const chat = /^1\.4\./.test(VERSION) ? findChat(current) : undefined;
+			const chat = COMPATIBLE.test(VERSION) ? findChat(current) : undefined;
 			supported = !!chat;
 			if (chat) view = new FocusView(chat, () => ctx.ui.theme, () => tui?.requestRender());
 			else if (!warned) {

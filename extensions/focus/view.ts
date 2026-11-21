@@ -58,7 +58,7 @@ function kind(component: NativeComponent): Kind {
 }
 
 /**
- * Pi 1.4 compatibility boundary. Pi exposes widgets but no transcript filter.
+ * Pi 1.x compatibility boundary. Pi exposes widgets but no transcript filter.
  * The native document is retained in tui.children in both TUI modes, also when
  * todo-sidebar wraps those children. Do not replace layout roots or scroll views.
  * Unknown layouts retain the unfiltered UI instead of guessing at child indices.

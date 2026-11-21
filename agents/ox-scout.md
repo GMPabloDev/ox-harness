@@ -14,7 +14,7 @@ defaultProgress: false
 output: scout.md
 outputMode: file-only
 async: true
-timeoutMs: 900000
+timeoutMs: 3600000
 maxSubagentDepth: 1
 allowedAgents:
 acceptanceRole: read-only
