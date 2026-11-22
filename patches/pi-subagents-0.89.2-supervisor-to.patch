@@ -1,0 +1,35 @@
+--- a/src/intercom/native-supervisor-channel.js
++++ b/src/intercom/native-supervisor-channel.js
+@@ -571,9 +571,10 @@
+             || request.childTarget?.toLowerCase() === normalizedTo);
+         if (matches.length === 1)
+             return matches[0];
++        const current = requests.length ? `Pending now:\n${requests.map(pendingHeader).join("\n")}` : "No pending supervisor requests.";
+         if (matches.length > 1)
+-            throw new Error(`Multiple pending supervisor requests match '${params.to}'. Use replyTo.`);
+-        throw new Error(`No pending supervisor request matches '${params.to}'. Use replyTo.`);
++            throw new Error(`Multiple pending supervisor requests match '${params.to}'. Use replyTo. ${current}`);
++        throw new Error(`No pending supervisor request matches '${params.to}'. Use replyTo. ${current}`);
+     }
+     if (requests.length === 1)
+         return requests[0];
+@@ -596,7 +597,7 @@
+         name: NATIVE_SUPERVISOR_TOOL_NAME,
+         ...MODEL_ONLY_TOOL,
+         label: "Subagent Supervisor",
+-        description: "Native pi-subagents supervisor channel. Use reply/pending/status to answer child subagent requests without overriding pi-intercom.",
++        description: "Native pi-subagents supervisor channel. Use reply/pending/status to answer child subagent requests without overriding pi-intercom. Reply with replyTo and the request id from the notice; to only matches a request-id prefix, agent name, or childTarget, never a runId.",
+         parameters: IntercomParamsSchema,
+         async execute(_id, params) {
+             // Discover new request files even when demand-gated polling is idle.
+--- a/docs/workflows.md
++++ b/docs/workflows.md
+@@ -564,7 +564,7 @@
+ 
+ Children should not ask for clarification when the only conflict is review-only/no-edit versus progress-writing or artifact-writing instructions; no-edit wins.
+ 
+-The parent replies with `subagent_supervisor({ action: "reply", replyTo, message })` or checks pending requests with `subagent_supervisor({ action: "pending" })`. Supervisor messages are scoped to the exact Pi session id that spawned the child. A second Pi session in the same repository does not receive those requests.
++The parent replies with `subagent_supervisor({ action: "reply", replyTo, message })` or checks pending requests with `subagent_supervisor({ action: "pending" })`. An optional `to` matches a pending request by id prefix, agent name, or childTarget, never a run id, so prefer `replyTo` with the request id from the notice. Supervisor messages are scoped to the exact Pi session id that spawned the child. A second Pi session in the same repository does not receive those requests.
+ 
+ A nested coordinator needs both directions of coordination. If its agent declares an explicit `tools` allowlist, include `subagent_supervisor` to answer its own children, alongside `subagent` for delegation and `contact_supervisor` for asking its parent:
+ 

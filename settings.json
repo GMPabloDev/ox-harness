@@ -1,15 +1,15 @@
 {
   "$schema": "https://pi.dev/schemas/settings.schema.json",
-  "theme": "ox-theme",
+  "theme": "Gentleman-Sexy",
   "packages": [
     "npm:gentle-engram@0.3.0",
     "npm:pi-web-access",
     "npm:pi-btw",
-    "npm:pi-subagents@0.79.0"
+    "npm:pi-subagents@0.89.2"
   ],
   "lastChangelogVersion": "1.6.0",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-6.1-terra",
+  "defaultProvider": "opencode-go",
+  "defaultModel": "deepseek-v4.1-flash",
   "modelThinkingLevels": {
     "openai-codex/gpt-6.1-terra": "medium",
     "openai-codex/gpt-6-luna": "max",
@@ -27,18 +27,36 @@
   ],
   "subagents": {
     "disableBuiltins": true,
+    "defaultModel": "opencode-go/deepseek-v4.1-flash",
+    "defaultThinking": "max",
     "agentOverrides": {
-      "ox-explore": {
-        "model": "openai-codex/gpt-6-luna",
-        "thinking": "max"
-      },
-      "ox-researcher": {
-        "model": "openai-codex/gpt-6-luna",
+      "ox-code-auditor": {
+        "model": "opencode-go/deepseek-v4.1-flash",
         "thinking": "max"
       },
       "ox-committer": {
-        "model": "openai-codex/gpt-6-luna",
-        "thinking": "high"
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinking": "max"
+      },
+      "ox-explore": {
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinking": "max"
+      },
+      "ox-researcher": {
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinking": "max"
+      },
+      "ox-spec-auditor": {
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinking": "max"
+      },
+      "ox-spec-exec": {
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinking": "max"
+      },
+      "ox-spec-fix": {
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinking": "max"
       }
     }
   },
