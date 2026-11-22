@@ -1,5 +1,7 @@
 ---
 name: ox-researcher
+model: openai-codex/gpt-6-luna
+thinking: max
 description: Investiga preguntas externas con fuentes originales, contrasta afirmaciones relevantes y entrega conclusiones con enlaces y límites.
 advertise: true
 tools: read, web_search, fetch_content, get_search_content, source_check

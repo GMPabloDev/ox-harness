@@ -1,5 +1,7 @@
 ---
 name: ox-committer
+model: openai-codex/gpt-6-luna
+thinking: high
 description: Ejecuta las operaciones Git autorizadas mediante /commits, agrupa cambios existentes en commits semánticos y hace push solo si se aprobó, sin editar código.
 advertise: true
 tools: read, grep, find, ls, bash

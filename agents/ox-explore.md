@@ -1,5 +1,7 @@
 ---
 name: ox-explore
+model: openai-codex/gpt-6-luna
+thinking: max
 description: Explora código local y devuelve rutas, contratos y riesgos para un encargo acotado, sin editar ni ejecutar comandos.
 advertise: true
 tools: read, grep, find, ls
