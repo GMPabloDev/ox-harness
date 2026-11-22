@@ -66,22 +66,19 @@ def run(mode, temp):
         startup = drain(4)
         assert process.poll() is None, f"{mode}: Pi exited at startup"
         assert "│" in startup, f"{mode}: sidebar absent"
-        assert "Proyecto" in startup and "Proveedor" in startup and "Modelo" in startup and "Contexto" in startup and "Coste estimado" in startup, f"{mode}: session data absent"
+        assert "AGENTS" in startup and "PLAN" in startup, f"{mode}: section headers absent"
+        assert "ninguno activo" in startup and "idle" in startup, f"{mode}: empty agent state absent"
+        if mode == "regular":
+            for label in ["Proveedor", "Proyecto", "Contexto", "Coste estimado"]:
+                assert label in startup, f"{mode}: footer metric {label} absent"
+        else:
+            assert "ctx" in startup and "✿" in startup, f"{mode}: fixed header metrics absent"
         assert "TAREAS" not in startup, f"{mode}: old heading still visible"
-        assert "Prueba real del sidebar" in startup, f"{mode}: persisted state absent"
-        assert "\x1b[9m" in startup, f"{mode}: completed text not struck through"
+        assert "Comprobar terminal real" in startup, f"{mode}: persisted state absent"
+        assert "más · /todos" in startup, f"{mode}: plan did not compact in the fixed rail"
+        assert "Prueba real del sidebar" not in startup, f"{mode}: plan title still rendered as a panel header"
         assert "Failed to load extension" not in startup, startup
-        assert "varias líneas" in startup, f"{mode}: wrapped title absent"
         assert "/todos · ver lista completa" not in startup, f"{mode}: old footer still visible"
-        if mode == "fullscreen":
-            # SGR wheel down, over the sidebar body. No global mouse hooks needed.
-            os.write(master, b"\x1b[<65;150;15M")
-            wheel_output = drain(1)
-            assert "Tarea de prueba" in wheel_output, "fullscreen: independent wheel did not update tasks"
-        bottom = command("/todos bottom")
-        assert "Tarea de prueba 60" in bottom, f"{mode}: independent scroll to end failed"
-        top = command("/todos top")
-        assert "Leer contratos de Pi" in top, f"{mode}: independent scroll to start failed"
         resize(85)
         os.kill(process.pid, signal.SIGWINCH)
         drain(1)
@@ -96,15 +93,23 @@ def run(mode, temp):
         reload_output = command("/reload") + drain(2)
         assert process.poll() is None, f"{mode}: exited on reload"
         assert "│" in reload_output, f"{mode}: sidebar absent after reload"
-        assert "Prueba real del sidebar" in reload_output, f"{mode}: state lost on reload"
+        assert "Comprobar terminal real" in reload_output, f"{mode}: state lost on reload"
         listed = command("/todos")
+        assert "Prueba real del sidebar" in listed, f"{mode}: plan title absent from the full list"
+        assert "Tarea de prueba 60" in listed or "Tarea de prueba 4" in listed, f"{mode}: plan rows absent from the full list"
+        assert "\x1b[9m" in listed, f"{mode}: completed text not struck through"
         assert "Esc cerrar" in listed, f"{mode}: full-list view failed"
+        os.write(master, b"\x1b")
+        drain(0.5)
+        roster = command("/agents")
+        assert "Sin subagentes" in roster, f"{mode}: agent roster absent"
+        assert "Esc cerrar" in roster, f"{mode}: agent roster close hint absent"
         os.write(master, b"\x1b")
         drain(0.5)
         text = output.decode("utf-8", errors="replace")
         for error in ["Failed to load extension", "TypeError:", "Unhandled rejection", "exceeds terminal width", "Extension error"]:
             assert error not in text, f"{mode}: {error}"
-        return {"mode": mode, "startup": True, "wrapped_title": True, "no_footer": True, "independent_scroll": True, "wheel": mode == "fullscreen", "resize": True, "hide_show": True, "reload": True, "full_list": True}
+        return {"mode": mode, "sections": True, "session_info": True, "plan_compact": True, "resize": True, "hide_show": True, "reload": True, "full_list": True, "agents": True}
     finally:
         if process.poll() is None:
             os.killpg(process.pid, signal.SIGTERM)

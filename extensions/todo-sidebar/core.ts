@@ -1,6 +1,8 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Container, HStack, isViewportTUI, ScrollView, VStack, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import type { Component, TUI, TuiMouseEvent } from "@earendil-works/pi-tui";
+import { Container, HStack, isViewportTUI, VStack, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import type { Component, TUI } from "@earendil-works/pi-tui";
+import { agentColor, phaseStyle, rowTime } from "./agents.ts";
+import type { AgentRow, AgentSnapshot } from "./agents.ts";
 
 export type Status = "pending" | "in_progress" | "completed" | "cancelled";
 export interface Todo { id: string; content: string; status: Status }
@@ -8,7 +10,10 @@ export interface TodoState { version: 1; title: string; todos: Todo[] }
 export const ENTRY_TYPE = "todo-sidebar-state";
 export const emptyState = (): TodoState => ({ version: 1, title: "Plan de trabajo", todos: [] });
 
-// No terminal controls, bidi overrides, or multi-line titles in stored task text.
+const MAX_AGENT_ROWS = 8;
+const PLAN_CHROME = 4;
+
+// No terminal controls, bidi overrides, or multi-line task text in stored text.
 export function cleanText(text: string): string {
 	return text.replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/gu, " ").trim();
 }
@@ -52,212 +57,223 @@ export function restoreState(entries: Iterable<unknown>): TodoState {
 const SIDEBAR_GAP = 5;
 
 export function sidebarWidth(columns: number, rows: number): number {
-	if (columns < 120 || rows < 16) return 0;
-	return Math.min(50, Math.max(33, Math.floor(columns * 0.26)));
+	// Same rail as gentle-shell: 50 columns from 140, hidden on narrower terminals.
+	if (columns < 140 || rows < 16) return 0;
+	return 50;
 }
 
-/** Apply follow targets only after native layout has measured the new content. */
-class TaskScrollView extends ScrollView {
-	followingActive = true;
-	target: number | undefined = 0;
-	scrollBy(lines: number): number {
-		this.followingActive = false;
-		super.scrollBy(lines);
-		// Pi 1.4 can otherwise send leftover wheel delta to the primary chat.
-		return 0;
-	}
-	scrollTo(...args: Parameters<ScrollView["scrollTo"]>): void {
-		this.followingActive = false;
-		super.scrollTo(...args);
-	}
-	updateLayout(contentHeight: number, viewportHeight: number, requestRender: () => void): void {
-		super.updateLayout(contentHeight, viewportHeight, requestRender);
-		if (this.followingActive && this.target !== undefined) super.scrollTo(this.target);
-		this.target = undefined;
-	}
+function fit(text: string, width: number): string {
+	const clipped = truncateToWidth(text, Math.max(0, width));
+	return clipped + " ".repeat(Math.max(0, width - visibleWidth(clipped)));
 }
 
-export class TodoPanel extends VStack {
+/** Top rule with the embedded section label and the right-aligned meta. */
+function sectionTop(theme: Theme, width: number, label: string, meta: string): string {
+	const name = `▾ ${label}`;
+	const frame = (text: string) => theme.fg("border", text);
+	const hintRoom = Math.max(0, width - 8 - visibleWidth(name));
+	const hint = meta ? truncateToWidth(meta, hintRoom) : "";
+	const hintWidth = hint ? visibleWidth(hint) + 2 : 0;
+	const title = truncateToWidth(name, Math.max(1, width - 5 - hintWidth));
+	const fill = Math.max(0, width - 5 - visibleWidth(title) - hintWidth);
+	return frame("╭─ ") + theme.bold(theme.fg("text", title)) + frame(" " + "─".repeat(fill))
+		+ (hint ? frame(" ") + theme.fg("muted", hint) + frame(" ") : "") + frame("╮");
+}
+
+/** Box interior rows with one-cell padding on both sides. */
+function boxRows(theme: Theme, width: number, rows: string[]): string[] {
+	const edge = theme.fg("border", "│");
+	const content = Math.max(0, width - 4);
+	return rows.map(row => edge + " " + fit(row, content) + " " + edge);
+}
+
+function boxBottom(theme: Theme, width: number): string {
+	return theme.fg("border", "╰" + "─".repeat(Math.max(0, width - 2)) + "╯");
+}
+
+/**
+ * Plan content for the PLAN box. The list grows with the work. When it no
+ * longer fits, completed tasks collapse into one summary row and pending
+ * tasks beyond the screen budget become a `+N más` row. There is no scroll.
+ */
+export class TodoPanel {
 	state = emptyState();
-	readonly scroll: TaskScrollView;
-	private height = 24;
-	private bodyCache = new Map<number, string[]>();
-	private headerCache = new Map<number, string[]>();
-	private contentRows = 0;
+	private cache = new Map<number, string[][]>();
 
-	constructor(private theme: () => Theme) {
-		super();
-		const body = { render: (width: number) => this.renderBody(width), invalidate: () => this.bodyCache.clear() };
-		this.scroll = new TaskScrollView(body, {
-			primary: false, follow: "none", overscroll: "contain", scrollbar: "always",
-			scrollbarTrackStyle: text => this.scrollbarStyle(text, "borderMuted"),
-			scrollbarThumbStyle: () => this.scrollbarStyle("┃", "muted"),
-		});
-		this.addChild({
-			render: width => this.renderHeader(width),
-			invalidate: () => this.headerCache.clear(),
-			handleMouse: (event: TuiMouseEvent) => {
-				if (event.type !== "wheel") return;
-				this.scrollBy(event.wheelDelta ?? 0);
-				return { handled: true, render: true };
-			},
-		}, { shrink: 0 });
-		this.addChild(this.scroll, { basis: 0, grow: 1, shrink: 1, minSize: 1 });
-	}
+	constructor(private theme: () => Theme) {}
 	getTheme(): Theme { return this.theme(); }
 	setState(state: TodoState): void {
-		const newPlan = state.title !== this.state.title || state.todos.map(t => t.id).join("\0") !== this.state.todos.map(t => t.id).join("\0");
 		this.state = state;
-		if (newPlan) { this.scroll.followingActive = true; this.scroll.target = 0; }
 		this.invalidate();
+	}
+	invalidate(): void { this.cache.clear(); }
+
+	private groups(width: number): string[][] {
+		const cached = this.cache.get(width);
+		if (cached) return cached;
+		const th = this.theme();
+		const text = Math.max(1, width);
+		const groups = this.state.todos.map(todo => {
+			const done = todo.status === "completed";
+			const removed = todo.status === "cancelled";
+			const current = todo.status === "in_progress";
+			const marker = current ? "●" : done ? "✓" : removed ? "−" : "○";
+			const budget = Math.max(1, text - 3);
+			return wrapTextWithAnsi(todo.content, budget).map((line, row) => fit(th.style((row ? "   " : `${marker}  `) + line, {
+				fg: done || removed ? "dim" : current ? "text" : "muted",
+				strikethrough: done || removed,
+				bold: current,
+			}), text));
+		});
+		this.cache.set(width, groups);
+		return groups;
+	}
+
+	/** Rows for the box interior. Width excludes both borders; capacity is the row budget. */
+	render(width: number, capacity: number): string[] {
+		const th = this.theme();
+		const text = Math.max(1, width);
+		const groups = this.groups(text);
+		const all = this.state.todos.map((todo, index) => ({ todo, index, rows: groups[index] }));
+		const total = all.reduce((sum, item) => sum + item.rows.length, 0);
+		if (!total) return [fit(th.fg("muted", "sin tareas · /todos"), text)];
+		if (total <= capacity) return groups.flat();
+
+		const live = all.filter(item => item.todo.status !== "completed" && item.todo.status !== "cancelled");
+		const closed = all.filter(item => item.todo.status === "completed" || item.todo.status === "cancelled");
+		const active = live.findIndex(item => item.todo.status === "in_progress");
+		const summaryLine = (items: typeof all): string | undefined => {
+			const completed = items.filter(item => item.todo.status === "completed").length;
+			const cancelled = items.filter(item => item.todo.status === "cancelled").length;
+			const parts = [completed ? `✓ ${completed}` : "", cancelled ? `− ${cancelled}` : ""].filter(Boolean);
+			return parts.length ? fit(th.fg("dim", `${parts.join(" · ")} · /todos`), text) : undefined;
+		};
+		/** Newest finished rows first; the rest stay behind the summary. */
+		const newestClosed = (budget: number): Set<number> => {
+			const chosen = new Set<number>();
+			let used = 0;
+			for (let index = closed.length - 1; index >= 0; index--) {
+				if (used + closed[index].rows.length > budget) break;
+				chosen.add(closed[index].index);
+				used += closed[index].rows.length;
+			}
+			return chosen;
+		};
+		const compose = (chosen: Set<number>, summary: string | undefined): string[] =>
+			[...(summary ? [summary] : []), ...all.filter(item => chosen.has(item.index)).flatMap(item => item.rows)];
+
+		if (capacity <= 1) {
+			const item = live[active >= 0 ? active : 0] ?? closed[closed.length - 1];
+			return item ? [item.rows[0]] : [];
+		}
+		if (!live.length) {
+			const chosen = newestClosed(capacity - 1);
+			return compose(chosen, summaryLine(closed.filter(item => !chosen.has(item.index)))).slice(0, capacity);
+		}
+
+		const liveRows = live.reduce((sum, item) => sum + item.rows.length, 0);
+		if (liveRows < capacity) {
+			// All live work fits. Spend the remaining rows on the newest finished work.
+			const chosen = new Set<number>(live.map(item => item.index));
+			for (const index of newestClosed(capacity - liveRows - 1)) chosen.add(index);
+			return compose(chosen, summaryLine(closed.filter(item => !chosen.has(item.index)))).slice(0, capacity);
+		}
+		if (liveRows === capacity) return live.flatMap(item => item.rows);
+
+		// Live work alone does not fit: the active task is mandatory, then the
+		// nearest following tasks, then the nearest previous ones.
+		const budget = Math.max(0, capacity - (closed.length ? 1 : 0) - 1);
+		const chosen = new Set<number>();
+		let used = 0;
+		const take = (index: number) => {
+			const item = live[index];
+			if (chosen.has(item.index) || used + item.rows.length > budget) return;
+			chosen.add(item.index);
+			used += item.rows.length;
+		};
+		if (active >= 0) {
+			chosen.add(live[active].index);
+			used += live[active].rows.length;
+			for (let index = active + 1; index < live.length; index++) take(index);
+			for (let index = active - 1; index >= 0; index--) take(index);
+		} else {
+			for (let index = 0; index < live.length; index++) take(index);
+		}
+		const hidden = live.length - chosen.size;
+		const body = compose(chosen, summaryLine(closed));
+		if (hidden && body.length < capacity) body.push(fit(th.fg("muted", `+${hidden} más · /todos`), text));
+		return body.slice(0, Math.max(1, capacity));
+	}
+}
+
+function planMeta(state: TodoState): string {
+	if (!state.todos.length) return "vacío";
+	const done = state.todos.filter(todo => todo.status === "completed").length;
+	return `${done}/${state.todos.length}`;
+}
+
+export class Sidebar extends VStack {
+	private height: number;
+	constructor(private tui: TUI, readonly tasks: TodoPanel, private agents: () => AgentSnapshot, private theme: () => Theme) {
+		super([], { gap: 0 });
+		this.height = tui.terminal.rows;
+		const line = (render: (width: number) => string[]): Component => ({ render, invalidate() {} });
+		this.addChild(line(() => [""]), { basis: 1, shrink: 0 });
+		this.addChild({ render: (width: number) => this.agentSection(width), invalidate() {} }, { shrink: 0 });
+		this.addChild(line(() => [""]), { basis: 1, shrink: 0 });
+		this.addChild({ render: (width: number) => this.planSection(width), invalidate() {} }, { shrink: 0 });
+	}
+	/** Row budget for the plan, after the fixed chrome and the agent rows. */
+	private planCapacity(width: number, agentsHeight = this.agentSection(width).length): number {
+		return Math.max(1, this.height - agentsHeight - PLAN_CHROME);
+	}
+	private planSection(width: number): string[] {
+		const rows = this.tasks.render(Math.max(1, width - 4), this.planCapacity(width));
+		return [sectionTop(this.theme(), width, "PLAN", planMeta(this.tasks.state)), ...boxRows(this.theme(), width, rows), boxBottom(this.theme(), width)];
 	}
 	setHeight(height: number): void {
 		if (height === this.height) return;
 		this.height = height;
 		this.invalidate();
 	}
-	scrollBy(lines: number): void { this.scroll.scrollBy(lines); }
-	scrollToEdge(edge: "top" | "bottom"): void {
-		this.scroll.followingActive = false;
-		if (edge === "top") this.scroll.scrollToStart();
-		else this.scroll.scrollToEnd();
+	invalidate(): void { this.tasks.invalidate(); }
+	render(width: number): string[] {
+		return this.renderHeight(width, this.height);
 	}
-	follow(): void {
-		this.scroll.followingActive = true;
-		this.scroll.target = 0;
-		this.invalidate();
+	private maxAgentRows(): number {
+		return Math.max(1, Math.min(MAX_AGENT_ROWS, this.height - 12));
 	}
-	invalidate(): void { this.bodyCache.clear(); this.headerCache.clear(); }
-	render(width: number): string[] { return this.renderHeight(width, this.height); }
-
-	private line(text: string, width: number): string {
-		return this.theme().bg("toolPendingBg", "  " + fit(text, Math.max(0, width - 3)) + " ");
-	}
-	private scrollbarStyle(text: string, color: "borderMuted" | "muted"): string {
+	private agentSection(width: number): string[] {
 		const th = this.theme();
-		return th.bg("toolPendingBg", this.contentRows > this.scroll.viewportHeight ? th.fg(color, text) : " ");
+		const snapshot = this.agents();
+		const rows = [...snapshot.active, ...snapshot.recent];
+		const limit = this.maxAgentRows();
+		const shown = rows.slice(0, limit);
+		const body = shown.map(row => this.agentLine(row, width, snapshot.now));
+		if (rows.length > shown.length) body.push(th.fg("muted", `+${rows.length - shown.length} más · /agents`));
+		if (!body.length) body.push(th.fg("muted", "ninguno activo · /agents"));
+		const count = snapshot.active.length;
+		const meta = count ? `${count} ${count === 1 ? "activo" : "activos"}` : "idle";
+		return [sectionTop(th, width, "AGENTS", meta), ...boxRows(th, width, body), boxBottom(th, width)];
 	}
-	private renderHeader(width: number): string[] {
-		const cached = this.headerCache.get(width);
-		if (cached) return cached;
+	private agentLine(row: AgentRow, width: number, now: number): string {
 		const th = this.theme();
-		const amber = th.colors.mdHeading;
-		const { todos, title } = this.state;
-		const completed = todos.filter(t => t.status === "completed").length;
-		const inner = Math.max(1, width - 3);
-		const count = `${completed}/${todos.length}`;
-		const maxDots = Math.max(1, Math.floor((inner - count.length - 2) / 2));
-		const dots = Math.min(todos.length, maxDots);
-		const proportional = todos.length ? Math.round(dots * completed / todos.length) : 0;
-		const filled = dots > 1 && completed > 0 && completed < todos.length ? Math.max(1, Math.min(dots - 1, proportional)) : proportional;
-		const progress = Array.from({ length: dots }, (_, index) => index < filled
-			? th.style("●", { fg: amber }) : th.fg("borderMuted", "○")).join(" ");
-		const lines = [
-			"",
-			...wrapTextWithAnsi(title, inner).map(text => th.style(text, { fg: "text", bold: true })),
-			"",
-			progress + th.fg("muted", `${dots ? "  " : ""}${count}`),
-			"",
-		].map(text => this.line(text, width));
-		this.headerCache.set(width, lines);
-		return lines;
+		const content = Math.max(1, width - 4);
+		const style = phaseStyle(row.phase);
+		const time = rowTime(row, now);
+		const nameBudget = Math.max(1, content - 2 - (time ? visibleWidth(time) + 1 : 0));
+		const name = truncateToWidth(row.agent, nameBudget);
+		const left = th.style(style.icon, { fg: style.color }) + " " + th.style(name, { fg: agentColor(row.agent, th), bold: true });
+		if (!time) return left;
+		const gap = Math.max(1, content - visibleWidth(left) - visibleWidth(time));
+		return left + " ".repeat(gap) + th.fg("dim", time);
 	}
-	private renderBody(width: number): string[] {
-		const cached = this.bodyCache.get(width);
-		if (cached) { this.contentRows = cached.length; return cached; }
-		const th = this.theme();
-		const body: string[] = [];
-		let activeRow: number | undefined;
-		for (const todo of this.state.todos) {
-			const done = todo.status === "completed";
-			const removed = todo.status === "cancelled";
-			const current = todo.status === "in_progress";
-			if (current && activeRow === undefined) activeRow = body.length;
-			const marker = current ? "●" : done ? "✓" : removed ? "−" : "○";
-			const markerColor = current ? th.colors.mdHeading : done ? th.colors.success : th.colors.dim;
-			for (const [row, text] of wrapTextWithAnsi(todo.content, Math.max(1, width - 6)).entries()) {
-				body.push(th.style(row ? "   " : `${marker}  `, { fg: markerColor }) + th.style(text, {
-					fg: done || removed ? "dim" : current ? "text" : "muted", strikethrough: done || removed, bold: current,
-				}));
-			}
-			body.push("");
-		}
-		if (body.length) body.pop();
-		else body.push(th.fg("muted", "El plan aparecerá aquí"), th.fg("muted", "cuando empiece el trabajo."));
-		if (this.scroll.followingActive && activeRow !== undefined) this.scroll.target = activeRow;
-		const lines = body.map(text => this.line(text, width));
-		this.contentRows = lines.length;
-		this.bodyCache.set(width, lines);
-		return lines;
-	}
-
-	/** Height needed for the complete list at this width, before viewport clipping. */
-	naturalHeight(width: number): number {
-		return this.renderHeader(width).length + this.renderBody(Math.max(1, width - 1)).length;
-	}
-
-	/** Regular mode uses the same scroll state, without enabling mouse capture. */
-	renderHeight(width: number, height: number): string[] {
-		if (width < 1 || height < 1) return Array.from({ length: Math.max(0, height) }, () => "");
-		this.setHeight(height);
-		const header = this.renderHeader(width);
-		const capacity = Math.max(1, height - header.length);
-		const body = this.renderBody(width - 1);
-		this.scroll.updateLayout(body.length, capacity, () => {});
-		const max = Math.max(0, body.length - capacity);
-		const thumbHeight = Math.max(Math.min(2, capacity), Math.round(capacity * capacity / body.length));
-		const thumbTop = max ? Math.round(this.scroll.scrollTop / max * (capacity - thumbHeight)) : 0;
-		return [...header, ...Array.from({ length: capacity }, (_, row) => {
-			const thumb = row >= thumbTop && row < thumbTop + thumbHeight;
-			return (body[this.scroll.scrollTop + row] ?? this.line("", width - 1)) + this.scrollbarStyle(thumb ? "┃" : "│", thumb ? "muted" : "borderMuted");
-		})];
-	}
-}
-
-function fit(text: string, width: number): string {
-	const clipped = truncateToWidth(text, width);
-	return clipped + " ".repeat(Math.max(0, width - visibleWidth(clipped)));
-}
-
-/** Two sections with separate left rails; the task ScrollView remains a native layout node. */
-export class Sidebar extends VStack {
-	private height = 24;
-	private status: () => string[] = () => [];
-	constructor(private tui: TUI, readonly tasks: TodoPanel, private theme: () => Theme) {
-		super();
-		const edge = (text: string) => this.theme().fg("mdCode", text);
-		const vertical = () => ({ render: () => Array.from({ length: this.tui.terminal.rows }, () => edge("│")), invalidate() {} });
-		const info = { render: (width: number) => this.infoLines().map(line => edge("│") + fit(" " + line, Math.max(0, width - 1))), invalidate() {} };
-		const taskRow = new HStack([], { align: "stretch" });
-		taskRow.addChild(vertical(), { basis: 1, grow: 0, shrink: 0 });
-		taskRow.addChild(tasks, { basis: 0, grow: 1, shrink: 1, minSize: 1 });
-		this.addChild(info, { shrink: 0 });
-		this.addChild({ render: () => [""], invalidate() {} }, { shrink: 0, visible: () => this.tasks.state.todos.length > 0 });
-		this.addChild(taskRow, { basis: 0, grow: 0, shrink: 1, minSize: 1, visible: viewport => {
-			if (!this.tasks.state.todos.length) return false;
-			const width = sidebarWidth(viewport.width, viewport.height);
-			const available = Math.max(1, viewport.height - this.infoRows() - 1);
-			const height = Math.min(available, this.tasks.naturalHeight(Math.max(1, width - 1)));
-			this.entries[2].basis = height;
-			this.tasks.setHeight(height);
-			return true;
-		} });
-	}
-	setStatus(get: () => string[]): void { this.status = get; }
-	setHeight(height: number): void { this.height = height; this.tasks.setHeight(Math.max(1, height - this.infoRows() - 1)); }
-	private infoRows(): number { return Math.max(1, Math.min(this.status().length, Math.max(1, this.height - (this.tasks.state.todos.length ? 8 : 0)))); }
-	private infoLines(): string[] { const lines = this.status().slice(0, this.infoRows()); return lines.length ? lines : [""]; }
-	render(width: number): string[] { return this.renderHeight(width, this.height); }
 	renderHeight(width: number, height: number): string[] {
 		this.setHeight(height);
-		const edge = (text: string) => this.theme().fg("mdCode", text);
-		const info = this.infoLines().map(line => edge("│") + fit(" " + line, width - 1));
-		if (!this.tasks.state.todos.length) return [...info, ...Array(Math.max(0, height - info.length)).fill(" ".repeat(width))];
-		const available = Math.max(1, height - info.length - 1);
-		const taskHeight = Math.min(available, this.tasks.naturalHeight(width - 1));
-		const body = this.tasks.renderHeight(width - 1, taskHeight);
-		const lines = [...info, " ".repeat(width), ...body.map(line => edge("│") + fit(line, width - 1))];
-		return [...lines, ...Array(Math.max(0, height - lines.length)).fill(" ".repeat(width))];
+		const agents = this.agentSection(width);
+		const rows = this.tasks.render(Math.max(1, width - 4), this.planCapacity(width, agents.length));
+		const lines = ["", ...agents, "", sectionTop(this.theme(), width, "PLAN", planMeta(this.tasks.state)), ...boxRows(this.theme(), width, rows), boxBottom(this.theme(), width)];
+		return Array.from({ length: Math.max(0, height) }, (_, index) => fit(lines[index] ?? "", width));
 	}
 }
 
@@ -272,7 +288,7 @@ export class TodoSidebarLayout extends Container {
 	render(width: number): string[] {
 		const height = this.tui.terminal.rows;
 		const side = this.enabled && this.tui.mode === "regular" ? sidebarWidth(width, height) : 0;
-		if (!side) return super.render(width);
+		if (!side) return [...super.render(width)];
 		const mainWidth = width - side - SIDEBAR_GAP;
 		const blocks = this.children.map(child => child.render(mainWidth));
 		const length = blocks.reduce((sum, block) => sum + block.length, 0);
@@ -290,13 +306,13 @@ export class TodoSidebarLayout extends Container {
 }
 
 class FullscreenSidebarLayout extends HStack {
-	constructor(tui: TUI, root: Component, panel: Sidebar, regular: TodoSidebarLayout) {
+	constructor(tui: TUI, root: Component, panel: Sidebar, regular: TodoSidebarLayout, reservedRows: number) {
 		super([], { gap: SIDEBAR_GAP, align: "stretch" });
 		this.addChild(root, { basis: 0, grow: 1, shrink: 1, minSize: 1 });
 		this.addChild(panel, {
 			basis: 0, grow: 0, shrink: 0,
 			visible: viewport => {
-				panel.setHeight(tui.terminal.rows);
+				panel.setHeight(Math.max(1, tui.terminal.rows - reservedRows));
 				const side = regular.enabled ? sidebarWidth(viewport.width, tui.terminal.rows) : 0;
 				this.entries[1].basis = side;
 				return side > 0;
@@ -305,14 +321,13 @@ class FullscreenSidebarLayout extends HStack {
 	}
 }
 
-export function mountSidebar(tui: TUI, tasks: TodoPanel, status: () => string[] = () => []): { layout: TodoSidebarLayout; sync(): void; dispose(): void } {
-	const panel = new Sidebar(tui, tasks, () => tasks.getTheme());
-	panel.setStatus(status);
+export function mountSidebar(tui: TUI, tasks: TodoPanel, agents: () => AgentSnapshot, header?: (width: number) => string): { layout: TodoSidebarLayout; sync(): void; dispose(): void } {
+	const panel = new Sidebar(tui, tasks, agents, () => tasks.getTheme());
 	const children = [...tui.children];
 	const layout = new TodoSidebarLayout(tui, panel, children);
 	tui.children.splice(0, tui.children.length, layout);
 	let nativeRoot: Component | undefined;
-	let fullscreen: FullscreenSidebarLayout | undefined;
+	let fullscreen: Component | undefined;
 	let disposed = false;
 	const sync = () => {
 		if (disposed || !isViewportTUI(tui)) return;
@@ -323,7 +338,11 @@ export function mountSidebar(tui: TUI, tasks: TodoPanel, status: () => string[] 
 			!("render" in current) || typeof current.render !== "function" ||
 			!("invalidate" in current) || typeof current.invalidate !== "function") return;
 		nativeRoot = current as Component;
-		fullscreen = new FullscreenSidebarLayout(tui, nativeRoot, panel, layout);
+		const row = new FullscreenSidebarLayout(tui, nativeRoot, panel, layout, header ? 3 : 0);
+		fullscreen = header ? new VStack([
+			{ component: { render: (width: number) => ["", width < 2 ? truncateToWidth(header(width), width) : " " + fit(header(width - 2), width - 2) + " ", ""], invalidate() {} }, basis: 3, shrink: 0 },
+			{ component: row, basis: 0, grow: 1, minSize: 1 },
+		]) : row;
 		tui.setLayoutRoot(fullscreen);
 	};
 	sync();
