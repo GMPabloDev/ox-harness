@@ -91,16 +91,9 @@ No ofrezcas alternativas ni sugieras «Puedo empezar de todos modos si quieres»
 
 Una vez confirmado que el estado significa `Approved`:
 
-0. **Comprueba primero el working tree.** Revisa la salida de `git status --short` en el contexto de la sesión anterior. Si **no está vacía**, detente, muestra los cambios pendientes y pregunta:
+0. **Comprueba el working tree y el catálogo antes de tocar Git.** Ejecuta `git status --short`. Si hay cambios, muéstralos y detente antes de cambiar de rama, hacer rebase o implementar. Pide al usuario que gestione los cambios y vuelva a ejecutar el comando con el árbol limpio. No hagas commit, stash ni descartes los cambios por tu cuenta.
 
-   ```
-   ⚠️ Hay cambios sin commit en el working tree.
-   Al cambiar de rama, esos cambios se trasladarían a la otra rama. ¿Qué quieres hacer?
-     1. Haz commit o stash de los cambios por tu cuenta y vuelve a ejecutar este comando (recomendado).
-     2. Continuar de todos modos: los cambios se trasladarán a la nueva rama.
-   ```
-
-   Espera la respuesta. **No hagas stash ni commit en nombre del usuario** a menos que te lo pida explícitamente. Si el working tree está limpio, pasa directamente al paso 1 sin mencionarlo.
+   Con el árbol limpio, comprueba que el catálogo activo de `pi-subagents` (`subagent` con `action: "list"`) ofrece `ox-spec-exec`, `ox-spec-auditor`, `ox-code-auditor` y `ox-spec-fix`. Si la herramienta no está disponible o falta un rol, informa cuál y detente antes de cambiar de rama o hacer rebase. Un archivo en `agents/` no prueba que el perfil activo lo haya cargado.
 
 1. Obtén el nombre de la rama a partir del nombre completo del archivo de la spec, sin la extensión. Formato: `spec-NN-slug`. Ejemplos:
 
@@ -128,7 +121,7 @@ Una vez confirmado que el estado significa `Approved`:
    - Si el usuario responde **sí**, crea la rama o cambia a ella exactamente como en el caso `true` anterior.
    - Si responde **no** o deja la respuesta vacía, **no crees ninguna rama**. Indica que implementarás en la rama actual (la que aparece en el contexto de la sesión anterior) y solicita confirmación explícita para continuar allí. No improvises: espera la respuesta.
 
-3. **Actualiza la rama de la spec con la `main` local.** Si estás en `spec-NN-slug`, comprueba que existe `refs/heads/main`, que no hay operaciones Git en curso y que `git status --porcelain` está vacío. Si alguna comprobación falla, detente e informa; no hagas stash ni descartes cambios. Esto también se aplica si antes elegiste continuar con cambios pendientes.
+3. **Actualiza la rama de la spec con la `main` local.** Si estás en `spec-NN-slug`, comprueba que existe `refs/heads/main`, que no hay operaciones Git en curso y que `git status --porcelain` está vacío. Si alguna comprobación falla, detente e informa; no hagas stash ni descartes cambios.
 
    Guarda la referencia de `HEAD`, el hash de la `main` local y una huella del contenido de la spec aprobada. Ejecuta `git rebase refs/heads/main` sin preguntar. No hagas fetch ni uses una rama remota. Si el rebase falla o hay conflictos, detente y muestra el estado y el error. No resuelvas conflictos, abortes el rebase ni reescribas más historial por tu cuenta.
 
@@ -184,7 +177,10 @@ Una vez recibida la confirmación, sigue estas reglas durante toda la implementa
 
 **Ejecución de los bloques:**
 
-1. Antes de cada bloque registra el commit base y el estado del árbol. Habilita las herramientas de subagentes si es necesario. Lanza `ox-spec-exec` en el directorio y la rama actuales, con contexto nuevo. Usa un solo implementador a la vez y no uses un worktree separado.
+Antes de implementar, guarda como **base de revisión final** el SHA completo que precede al primer commit de implementación de esta spec. Si empiezas de cero, es el `HEAD` después de preparar la rama y antes del primer bloque. Si reanudas, identifica ese commit en el historial actual, incluidos los bloques previos; no uses el `HEAD` de reanudación como base. Si no puedes identificarlo con certeza, pide al usuario que confirme la base.
+
+1. Antes de cada bloque registra el commit base y el estado del árbol. Habilita las herramientas de subagentes si es necesario. Lanza `ox-spec-exec` en el directorio y la rama actuales, con contexto nuevo y en segundo plano (`async: true`), para poder atender sus consultas. Conserva el ID del run. Usa un solo implementador a la vez y no uses un worktree separado.
+   Espera sus eventos con `bg_wait` y el ID del run. Si solicita una decisión, identifica la petición pendiente con `subagent_supervisor({ action: "pending" })`; tras resolverla con el usuario cuando corresponda, responde con `subagent_supervisor({ action: "reply", replyTo: "<request-id>", message: "<decisión>" })`. Usa el ID de la petición, no el ID del run. Si la respuesta falla o la petición ya no está pendiente, comprueba el estado e informa; no supongas que llegó ni relances automáticamente. Si `bg_wait` devuelve `window_elapsed`, el trabajo sigue activo: consulta su estado antes de volver a esperar. No avances mientras siga activo.
 2. En cada encargo indica la ruta de la spec, el número y nombre del bloque, los pasos asignados, las restricciones aplicables y el contexto relevante de los bloques anteriores. Incluye la ruta local y la variante del prototipo cuando sean pertinentes. Pide el informe definido por el subagente.
 3. Al terminar el implementador, comprueba su informe, pruebas y alcance. Si terminó sin impedimentos, crea el commit de implementación con sus cambios atribuibles y registra su hash. Si no hay cambios, informa y detente para aclarar el resultado.
 4. Revisa exactamente el rango desde la base hasta el commit de implementación, con la spec completa y los bloques previos como contexto. Lanza `ox-spec-auditor` y `ox-code-auditor` en paralelo y con contexto nuevo mediante `pi-subagents` `runs.all`; indica modo `bloque`, repositorio, rama, base, commit final, rutas, bloque y pasos. No les pidas marcar casillas. Comprueba que el árbol y los commits examinados no cambien durante la revisión. Si falta un informe suficiente o el alcance cambia, detente e informa; no sustituyas un auditor.
@@ -210,7 +206,11 @@ Las decisiones técnicas que no cambian el comportamiento acordado pueden seguir
 
 **Al terminar el último bloque:**
 
-Resume los bloques, commits de implementación y corrección, revisiones por bloque, hallazgos, pruebas y limitaciones. Indica que todavía falta la revisión independiente de la spec completa. Sugiere `/skill:ox-spec-review` en una sesión nueva con el nombre de la spec y el commit base anterior a la implementación.
+Resume los bloques, commits de implementación y corrección, revisiones por bloque, hallazgos, pruebas y limitaciones. Indica que todavía falta la revisión independiente de la spec completa. Deja este comando listo para copiar en una sesión nueva, sustituyendo `<NN-slug>` y `<SHA-completo>` por el nombre real de la spec y la base de revisión final verificada:
+
+```text
+/skill:ox-spec-review <NN-slug> base <SHA-completo>
+```
 
 No cambies el estado de la spec. Tras una revisión satisfactoria y la resolución de los hallazgos, el usuario lo cambiará manualmente a `Implemented` o su equivalente.
 
