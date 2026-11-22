@@ -13,6 +13,7 @@ import termios
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+PI_VERSION = subprocess.check_output(["pi", "--version"], text=True).strip()
 
 
 def normalize(value):
@@ -31,7 +32,7 @@ def run(mode, enabled, folder):
     agent_dir = output_dir / "agent"
     agent_dir.mkdir()
     (agent_dir / "settings.json").write_text(json.dumps({
-        "theme": "ox-theme", "quietStartup": True, "lastChangelogVersion": "1.4.0", "cacheWarming": "off",
+        "theme": "ox-theme", "quietStartup": True, "lastChangelogVersion": PI_VERSION, "cacheWarming": "off",
         "defaultProvider": "focus-fixture", "defaultModel": "fixture", "defaultProjectTrust": "never",
     }))
     (agent_dir / "focus.json").write_text(json.dumps({"version": 1, "enabled": enabled}))

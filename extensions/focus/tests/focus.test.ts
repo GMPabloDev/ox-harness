@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Container, Text, TuiMainScreen, visibleWidth } from "@earendil-works/pi-tui";
 import { FocusView, findChat } from "../view.ts";
 import { agentColor, subagentCards } from "../cards.ts";
-import { activityLabel, cleanLine, customActivity, toolHasError, toolPolicy, withoutThinking } from "../policy.ts";
+import { activityLabel, cleanLine, customActivity, seriousToolFailure, toolHasError, toolPolicy, withoutThinking } from "../policy.ts";
 import { loadPreference, savePreference } from "../preferences.ts";
 import { installFocus } from "../index.ts";
 import { mountSidebar, TodoPanel } from "../../todo-sidebar/core.ts";
@@ -145,6 +145,102 @@ describe("visual policy", () => {
 });
 
 describe("real Pi components", () => {
+	test("renders correlated workflow child snapshots without exposing scripts or arguments", () => {
+		const h = view();
+		const component = new ToolExecutionComponent("subagent", "parent-1", { workflow: true, workflowScript: "SCRIPT_SECRET" }, {}, undefined, { requestRender() {} });
+		h.chat.addChild(component);
+		const update = (parentToolCallId: unknown, children: unknown[], inventoryComplete = false) => component.updateResult({ content: [{ type: "text", text: "Workflow running." }], details: { mode: "workflow", runId: "run-1", results: [], workflow: {}, workflowChildren: { version: 1, parentToolCallId, workflowRunId: "run-1", inventoryComplete, workflowState: "running", children }, chatProgress: {} } }, true);
+		const first = [{ childId: "one", agent: "scout", state: "running", activity: { currentTool: "bash", durationMs: 2000, args: "ARG_SECRET" } }];
+		for (const id of [undefined, "other"]) { update(id, first); expect(h.text()).not.toContain("scout"); }
+		update("parent-1", first);
+		let text = h.text();
+		expect(text).toContain("scout"); expect(text).toContain("en marcha"); expect(text).toContain("2s");
+		expect(text).not.toContain("SCRIPT_SECRET"); expect(text).not.toContain("ARG_SECRET"); expect(text).not.toContain("auditor");
+		update("parent-1", [{ childId: "one", agent: "scout", state: "completed" }, { childId: "two", agent: "auditor", state: "running" }], true);
+		text = h.text(); expect(text).toContain("completado"); expect(text).toContain("auditor"); expect(text).toContain("en marcha");
+		h.focus.dispose();
+	});
+	test("rejects mismatched workflow run IDs and keeps failed child secrets private", () => {
+		const h = view();
+		const component = new ToolExecutionComponent("subagent", "parent", { workflow: true, workflowScript: "SCRIPT_SECRET" }, {}, undefined, { requestRender() {} });
+		h.chat.addChild(component);
+		const summary = { version: 1, parentToolCallId: "parent", workflowRunId: "wrong", inventoryComplete: false, workflowState: "running", children: [{ childId: "child", agent: "auditor", state: "failed", task: "TASK_SECRET", activity: { currentTool: "bash", args: "ARGS_SECRET" } }] };
+		const update = () => component.updateResult({ content: [{ type: "text", text: "Workflow running." }], details: { mode: "workflow", runId: "correct", results: [], workflow: {}, workflowChildren: summary, chatProgress: {} } }, true);
+		update(); expect(h.text()).not.toContain("auditor");
+		summary.workflowRunId = "correct"; update();
+		const text = h.text(); expect(text).toContain("auditor"); expect(text).toContain("fallido");
+		for (const secret of ["TASK_SECRET", "SCRIPT_SECRET", "ARGS_SECRET"]) expect(text).not.toContain(secret);
+		h.focus.dispose();
+	});
+	test("refreshes a detached run whose status arrives after the initial unknown state", () => withTemp(async (_path, folder) => {
+		const ui = native(); let requests = 0;
+		const focus = new FocusView(ui.chat, () => themes.theme, () => { requests++; });
+		for (const initial of ["missing", "empty"]) {
+			const dir = join(folder, initial); const { mkdirSync } = await import("node:fs"); mkdirSync(dir);
+			if (initial === "empty") writeFileSync(join(dir, "status.json"), JSON.stringify({ steps: [] }));
+			const component = new ToolExecutionComponent("subagent", initial, { agent: "scout" }, {}, undefined, { requestRender() {} });
+			component.updateResult({ content: [], details: { asyncDir: dir } }, false);
+			ui.chat.addChild(component);
+			expect(plain(ui.chat.render(100))).toContain("estado desconocido");
+			writeFileSync(join(dir, "status.json"), JSON.stringify({ steps: [{ agent: "scout", status: "running" }] }));
+		}
+		await new Promise(resolve => setTimeout(resolve, 1200));
+		expect(requests).toBeGreaterThan(0);
+		expect(plain(ui.chat.render(100)).split("en marcha")).toHaveLength(3);
+		focus.dispose();
+	}));
+	test("shows async workflow step labels and observed states without inspecting scripts", () => withTemp((_path, folder) => {
+		writeFileSync(join(folder, "status.json"), JSON.stringify({ steps: [
+			{ agent: "scout", status: "running", label: "Explore sources", startedAt: 1000, workflowKey: "step-1" },
+			{ agent: "auditor", status: "completed", label: "Audit findings", workflowKey: "step-2" },
+		] }));
+		const h = view();
+		const component = new ToolExecutionComponent("subagent", "async-workflow", { workflow: true, workflowScript: "SCRIPT_SECRET" }, {}, undefined, { requestRender() {} });
+		component.updateResult({ content: [], details: { asyncDir: folder } }, false);
+		h.chat.addChild(component);
+		const text = h.text();
+		for (const value of ["scout", "auditor", "Explore sources", "Audit findings", "en marcha", "completado"]) expect(text).toContain(value);
+		expect(text).not.toContain("SCRIPT_SECRET");
+		h.focus.dispose();
+	}));
+	test("shows chain stages and dependencies pending and unknown after settlement", () => {
+		const h = view();
+		const component = new ToolExecutionComponent("subagent", "chain", { chain: [
+			{ parallel: [{ agent: "scout", task: "Explore" }, { agent: "researcher", task: "Research" }] },
+			{ agent: "auditor", task: "Audit {previous}" },
+		] }, {}, undefined, { requestRender() {} });
+		h.chat.addChild(component);
+		let text = h.text();
+		for (const value of ["scout", "researcher", "auditor", "pendiente", "depende de", "Explore", "Research"]) expect(text).toContain(value);
+		expect(text).not.toContain("en marcha");
+		component.updateResult({ content: [], details: {} }, false);
+		text = h.text();
+		expect(text).toContain("estado desconocido");
+		expect(text).not.toContain("completado");
+		h.focus.dispose();
+	});
+	test("does not invent single agent state without results", () => {
+		const h = view();
+		const component = new ToolExecutionComponent("subagent", "single", { agent: "scout", task: "Explore" }, {}, undefined, { requestRender() {} });
+		h.chat.addChild(component);
+		expect(h.text()).toContain("pendiente");
+		component.updateResult({ content: [], details: {} }, false);
+		expect(h.text()).toContain("estado desconocido");
+		expect(h.text()).not.toContain("completado");
+		h.focus.dispose();
+	});
+	test("shows planned parallel agents before results without claiming they are running", () => {
+		const h = view();
+		const component = new ToolExecutionComponent("subagent", "parallel", { workflow: "parallel", args: { tasks: [
+			{ agent: "alpha", task: "First task" }, { agent: "beta", task: "Second task" }, { agent: "gamma", task: "Third task" },
+		] } }, {}, undefined, { requestRender() {} });
+		h.chat.addChild(component);
+		const text = h.text();
+		for (const value of ["alpha", "beta", "gamma", "First task", "Second task", "Third task", "pendiente"]) expect(text).toContain(value);
+		expect(text).not.toContain("en marcha");
+		expect(text).not.toContain("completado");
+		h.focus.dispose();
+	});
 	test("buffers assistant text until settlement, hides thinking and restores the exact native view", () => {
 		const h = view();
 		const msg = message();
@@ -206,9 +302,84 @@ describe("real Pi components", () => {
 			expect(h.text()).not.toContain("THINKING_SECRET");
 		}
 	});
+	test("frames failed subagents while preserving native diagnostics and expansion", () => {
+		for (const diagnostic of ["OAuth authentication failed", "Invalid tool arguments: missing task"]) {
+			const h = view();
+			const component = new ToolExecutionComponent("subagent", "failed", { agent: "ox-explore" }, {}, undefined, { requestRender() {} });
+			const result = { content: [{ type: "text", text: diagnostic + "\n" + Array.from({ length: 20 }, (_, i) => `detail-${i}`).join("\n") }], details: {}, isError: true };
+			component.updateResult(result, false);
+			const snapshot = JSON.stringify(result);
+			h.chat.addChild(component);
+			for (const expanded of [false, true]) {
+				component.setExpanded(expanded);
+				h.focus.enabled = false;
+				const native = plain(component.render(100));
+				h.focus.enabled = true;
+				const rendered = h.text();
+				expect(rendered).toContain("╭─ ✗ ox-explore");
+				expect(rendered).toContain(native.trim());
+				expect(rendered).toContain(diagnostic);
+				for (const line of h.chat.render(100)) expect(visibleWidth(line)).toBeLessThanOrEqual(100);
+			}
+			expect(JSON.stringify(result)).toBe(snapshot);
+			h.focus.dispose();
+		}
+	});
+	test("does not disclose an agent hidden by a custom native failure renderer", () => {
+		const h = view();
+		const definition = { renderShell: "self", renderCall: () => new Text("NATIVE_CALL", 0, 0),
+			renderResult: (_result: unknown, options: { expanded: boolean }) => new Text(options.expanded ? "ERROR_EXPANDED" : "ERROR_COLLAPSED", 0, 0) };
+		const component = new ToolExecutionComponent("subagent", "hidden-agent", { agent: "PRIVATE_AGENT" }, {}, definition, { requestRender() {} });
+		const result = { content: [{ type: "text", text: "ERROR_BODY" }], details: {}, isError: true };
+		component.updateResult(result, false);
+		const snapshot = JSON.stringify(result);
+		h.chat.addChild(component);
+		for (const expanded of [false, true]) {
+			component.setExpanded(expanded);
+			h.focus.enabled = false;
+			const native = plain(component.render(100));
+			h.focus.enabled = true;
+			const text = h.text();
+			expect(text).toContain(native.trim());
+			expect(text).toContain(expanded ? "ERROR_EXPANDED" : "ERROR_COLLAPSED");
+			expect(text).toContain("subagente");
+			expect(text).not.toContain("PRIVATE_AGENT");
+		}
+		expect(JSON.stringify(result)).toBe(snapshot);
+		h.focus.dispose();
+	});
+	test("hides a quiet shell failure and keeps the ones that need attention", () => {
+		const failedShell = (text: string, exitCode = 1) => ({ content: [{ type: "text", text }], details: { exitCode }, isError: true });
+		// Sondas normales: grep sin coincidencias, cat de un archivo que no existe.
+		expect(seriousToolFailure("bash", failedShell("patches\n=== pkg ===\n"))).toBe(false);
+		expect(seriousToolFailure("bash", failedShell(""))).toBe(false);
+		expect(seriousToolFailure("bash", failedShell("No such file or directory"))).toBe(false);
+		// Fallos que sí piden atención.
+		expect(seriousToolFailure("bash", failedShell("bash: foo: command not found"))).toBe(true);
+		expect(seriousToolFailure("bash", failedShell(" 8 pass\n 1 fail"))).toBe(true);
+		expect(seriousToolFailure("bash", failedShell("error TS2322: Type mismatch"))).toBe(true);
+		expect(seriousToolFailure("bash", failedShell("", 127))).toBe(true);
+		expect(seriousToolFailure("bash", failedShell("CONFLICT (content): Merge conflict in src/app.ts"))).toBe(true);
+		expect(seriousToolFailure("bash", failedShell("! [rejected] main -> main (non-fast-forward)"))).toBe(true);
+		// El resto de herramientas conserva el bloque nativo al fallar.
+		expect(seriousToolFailure("read", failedShell("ENOENT"))).toBe(true);
+		expect(seriousToolFailure("edit", failedShell("no match"))).toBe(true);
+		expect(seriousToolFailure("bash", { content: [], details: {}, isError: false })).toBe(false);
+	});
+	test("drops a failed shell row from the transcript while focus is on", () => {
+		const h = view(); h.focus.busy = true;
+		const component = new ToolExecutionComponent("bash", "quiet-shell", { command: "cat package.json 2>/dev/null" }, {}, undefined, { requestRender() {} });
+		component.updateResult({ content: [{ type: "text", text: "=== pkg ===" }], details: { exitCode: 1 }, isError: true }, false);
+		h.chat.addChild(component);
+		h.focus.enabled = false;
+		expect(h.text()).toContain("=== pkg ===");
+		h.focus.enabled = true;
+		expect(h.text()).not.toContain("=== pkg ===");
+		h.focus.dispose();
+	});
 	test("keeps tool failures, unknown tools and permission UI visible", () => {
 		const h = view(); h.focus.busy = true;
-		h.chat.addChild(tool("bash", {}, true));
+		h.chat.addChild(tool("read", { path: "missing.ts" }, true));
 		h.chat.addChild(tool("ask_user", { question: "CHOOSE_OPTION" }));
 		h.chat.addChild(tool("contact_supervisor", { reason: "need_decision", message: "DECISION_REQUIRED" }));
 		expect(h.text()).toContain("IMPORTANT_TOOL_ERROR");
@@ -347,13 +518,14 @@ describe("real Pi components", () => {
 		const h = native();
 		const panel = new TodoPanel(() => themes.theme);
 		panel.setState({ version: 1, title: "Plan de trabajo", todos: [{ id: "1", content: "Prueba", status: "pending" }] });
-		const sidebar = mountSidebar(h.tui, panel);
+		const sidebar = mountSidebar(h.tui, panel, () => ["SESSION_STATUS_VISIBLE"]);
 		expect(findChat(h.tui)).toBe(h.chat);
 		const focus = new FocusView(h.chat, () => themes.theme);
 		const answer = assistant();
 		const original = answer.render;
 		h.chat.addChild(answer);
-		expect(plain(h.tui.render(160))).toContain("Plan de trabajo");
+		expect(plain(h.tui.render(160))).toContain("SESSION_STATUS_VISIBLE");
+		expect(panel.state.todos[0].content).toBe("Prueba");
 		expect(plain(h.tui.render(160))).toContain("FINAL_VISIBLE");
 		h.chat.clear(); h.chat.render(100);
 		expect(answer.render).toBe(original);
@@ -459,6 +631,15 @@ describe("subagent cards", () => {
 		plain(subagentCards(input, { content: [{ type: "text", text: "RUN_BODY_SECRET" }], details: folder ? { asyncId: "run-1", asyncDir: folder } : {} },
 			width, themes.theme, { now }).lines);
 
+	test("known agents have stable distinct Gentleman-Sexy colors and unknown agents remain deterministic", () => {
+		const names = ["ox-code-auditor", "ox-committer", "ox-explore", "ox-researcher", "ox-spec-auditor", "ox-spec-exec", "ox-spec-fix"];
+		const colors = { ...themes.theme.colors, accent: "#F43888", toolDiffAdded: "#A9C7EE", mdLink: "#FF4F9A", syntaxType: "#A9C7EE", customMessageLabel: "#E0C27A", syntaxFunction: "#C49BFF", syntaxNumber: "#D7A0B8", warning: "#F2B86D", error: "#FF718F" };
+		const theme = { colors } as any;
+		const chosen = names.map(name => agentColor(name, theme));
+		expect(new Set(chosen).size).toBe(7);
+		for (const name of [...names, "unknown-agent"]) expect(agentColor(name, theme)).toEqual(agentColor(name, theme));
+		expect(Object.values(colors)).toContain(agentColor("unknown-agent", theme));
+	});
 	test("gives each agent a stable color of its own", () => {
 		const scout = agentColor("ox-explore", themes.theme);
 		expect(agentColor("ox-explore", themes.theme)).toEqual(scout);
@@ -470,23 +651,48 @@ describe("subagent cards", () => {
 		const colors = Object.values(themes.theme.colors);
 		for (const name of ["custom-a", "custom-b", "custom-c"]) expect(colors).toContainEqual(agentColor(name, themes.theme));
 	});
-	test("leaves inner space above, below and beside the card content", () => {
+	test("frames each agent with its title in the top border", () => {
 		const lines = subagentCards(launch, {}, 80, themes.theme).lines;
 		const card = lines.filter(line => line.length > 0).map(line => plain([line]));
-		expect(card[0].trim()).toBe("▌");
-		expect(card.at(-1)!.trim()).toBe("▌");
-		for (const line of card) {
-			expect(visibleWidth(line)).toBe(80);
-			expect(line.startsWith("▌  ")).toBe(true);
-			expect(line.endsWith("  ")).toBe(true);
-		}
-		expect(card[1]).toContain("ox-researcher");
+		expect(card[0]).toStartWith("╭─ ");
+		expect(card[0]).toContain("ox-researcher");
+		expect(card[0]).toEndWith("╮");
+		expect(card.at(-1)).toStartWith("╰");
+		expect(card.at(-1)).toEndWith("╯");
+		for (const line of card) expect(visibleWidth(line)).toBe(80);
 	});
 	test("shows state, elapsed time, model, tokens, cost and the page being read", () => {
 		const text = render(runDir(running));
 		for (const expected of ["ox-researcher", "en marcha", "4s", "gpt-5.6-luna", "high", "ctx 11.1k", "out 3.5k", "$0.0027", "8 tools",
 			"fetch_content", "https://registry.npmjs.org/pkg", "Buscar la versión publicada"]) expect(text).toContain(expected);
 		expect(text).not.toContain("RUN_BODY_SECRET");
+	});
+	test("draws the context bar only with a valid per-step limit", () => {
+		const folder = runDir({ state: "complete", totalTokens: { window: 500 }, steps: [
+			{ agent: "a", status: "complete", tokens: { window: 250 }, contextLimit: 1000 },
+			{ agent: "b", status: "complete", tokens: { window: 0 }, contextLimit: 1000 },
+			{ agent: "c", status: "complete", contextLimit: 1000 },
+			{ agent: "d", status: "complete", tokens: { window: 250 }, contextLimit: 0 },
+			{ agent: "e", status: "complete", tokens: { window: 4 }, contextLimit: 1000 },
+		] });
+		const cards = render(folder, {}, 110).split("╭─ ").slice(1);
+		expect(cards[0]).toContain("ctx ▮▮▯▯▯▯▯▯ 25%");
+		expect(cards[1]).toContain("ctx ▯▯▯▯▯▯▯▯ 0%");
+		expect(cards[2]).toContain("ctx % desconocido");
+		expect(cards[3]).toContain("ctx 250 (% desconocido)");
+		expect(cards[4]).toContain("ctx ▮▯▯▯▯▯▯▯ <1%");
+	});
+	test("reports per-step duration and explicit zero cost without inventing missing values", () => {
+		const folder = runDir({ state: "complete", startedAt: 1000, endedAt: 9000, steps: [
+			{ agent: "ox-explore", status: "complete", durationMs: 2000, totalCost: { costUsd: 0 } },
+			{ agent: "ox-researcher", status: "complete" },
+		] });
+		const cards = plain(subagentCards({}, { details: { asyncDir: folder } }, 110, themes.theme, { now: 50000 }).lines);
+		const [first, second] = cards.split("╭─ ").slice(1);
+		expect(first).toContain("2s");
+		expect(first).toContain("$0");
+		expect(second).not.toContain("8s");
+		expect(second).not.toContain("$0");
 	});
 	test("marks a finished run and reports the run duration instead of the clock", () => {
 		const folder = runDir({ ...running, state: "complete", steps: [{ ...running.steps[0], status: "complete", endedAt: 61_000 }] });
@@ -533,7 +739,7 @@ describe("subagent cards", () => {
 		const text = render(undefined);
 		expect(text).toContain("ox-researcher");
 		expect(text).toContain("Buscar la versión publicada");
-		expect(text).toContain("en marcha");
+		expect(text).toContain("pendiente");
 	});
 	test("uses foreground results when the run did not detach", () => {
 		const text = plain(subagentCards({ agent: "ox-explore", task: "Explorar" }, { details: { results: [{

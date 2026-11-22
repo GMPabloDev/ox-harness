@@ -2,7 +2,7 @@ import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { Container, truncateToWidth } from "@earendil-works/pi-tui";
 import type { Component, TUI, TuiMouseEvent } from "@earendil-works/pi-tui";
 import { agentColor, MEMORY_COLOR, subagentCards, WEB_COLOR } from "./cards.ts";
-import { activityLabel, cleanLine, customActivity, customAgent, hasAssistantError, isAnswer, record, toolHasError, toolPolicy, withoutThinking } from "./policy.ts";
+import { activityLabel, cleanLine, customActivity, customAgent, hasAssistantError, isAnswer, record, seriousToolFailure, toolHasError, toolPolicy, withoutThinking } from "./policy.ts";
 import type { ToolPolicy } from "./policy.ts";
 
 interface NativeComponent extends Component {
@@ -176,7 +176,7 @@ export class FocusView {
 	private useNative(component: NativeComponent): boolean {
 		if (kind(component) === "tool") {
 			if (component.toolName === "contact_supervisor" && record(component.args).reason !== "progress_update") return true;
-			return toolHasError(component.result) || toolPolicy(component.toolName!, component.args) === "native" ||
+			return seriousToolFailure(component.toolName!, component.result) || toolPolicy(component.toolName!, component.args) === "native" ||
 				record(record(component.result).nestedCalls).complete === false ||
 				this.nestedCalls(component).some(call => call.error || toolPolicy(call.name, call.args) === "native");
 		}
@@ -230,7 +230,17 @@ export class FocusView {
 		const type = kind(component);
 		if (type === "assistant") return this.assistant(component, saved, width);
 		if (type === "skill") return this.compact("Skill cargada · " + cleanLine(record(component.skillBlock).name, 64), false, width, component.outputPad, { icon: "✦", color: "muted" });
-		if (this.useNative(component)) return saved.render.call(component, width);
+		if (this.useNative(component)) {
+			if (type === "tool" && component.toolName === "subagent" && !record(component.args).action && toolHasError(component.result)) {
+				const native = saved.render.call(component, width);
+				const name = cleanLine(record(component.args).agent, 40);
+				const visible = native.map(line => line.replace(/\x1b\[[0-9;]*m/g, "").replace(/\x1b\][^\x07]*\x07/g, ""));
+				const agent = name && visible.some(line => line.includes(name)) ? name : "subagente";
+				const card = subagentCards({ agent }, { details: { results: [{ agent, status: "failed" }] } }, width, this.theme());
+				return [...card.lines, ...native];
+			}
+			return saved.render.call(component, width);
+		}
 		if (type === "custom") {
 			const message = component.message;
 			return this.compact(customActivity(message)!, false, width, component.outputPad,
@@ -246,7 +256,7 @@ export class FocusView {
 		if (policy === "native") return saved.render.call(component, width);
 		const pending = component.isPartial !== false;
 		if (policy === "subagent" && component.toolName === "subagent" && !record(component.args).action) {
-			const card = subagentCards(component.args, component.result, width, this.theme(), { pending });
+			const card = subagentCards(component.args, component.result, width, this.theme(), { pending, toolCallId: component.toolCallId });
 			if (card.running) this.scheduleRefresh();
 			return card.lines;
 		}

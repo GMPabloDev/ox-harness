@@ -119,5 +119,14 @@ export function installFocus(pi: ExtensionAPI, preferencePath: string) {
 }
 
 export default function focus(pi: ExtensionAPI) {
+	// Temporal: cierra el temporizador del experimento subagent-cards, descartado.
+	// Pi no emite session_shutdown al recargar, así que su setInterval queda vivo
+	// y remontaría el panel viejo en el siguiente lanzamiento de agentes.
+	const orphanedCardsTimer = Symbol.for("ox.subagent-cards.timer");
+	const orphaned = (globalThis as Record<symbol, unknown>)[orphanedCardsTimer];
+	if (orphaned !== undefined) {
+		clearInterval(orphaned as ReturnType<typeof setInterval>);
+		delete (globalThis as Record<symbol, unknown>)[orphanedCardsTimer];
+	}
 	installFocus(pi, join(getAgentDir(), "focus.json"));
 }

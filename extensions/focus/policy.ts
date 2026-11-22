@@ -120,6 +120,39 @@ export function toolHasError(result: unknown): boolean {
 	});
 }
 
+// Un shell que falla por no encontrar coincidencias es parte normal de explorar.
+// Solo estos textos, o un código que indica que el comando no llegó a ejecutarse,
+// justifican ocupar el bloque nativo en Focus.
+const SERIOUS_SHELL_ERROR = /command not found|permission denied|operation not permitted|no space left|segmentation fault|core dumped|panic:|traceback|syntaxerror|error ts\d+|npm err!|fatal:|cannot find module|cannot find package|timed out|timeout after|\bkilled\b|\bconflict\b|\beacces\b|\beperm\b|\benospc\b|\(fail\)|\b\d+\s+fail(?:ed|s|ures?)?\b|\berror:\s|\bfailed\b|\brejected\b|\bunauthorized\b|\bforbidden\b|authentication failed|\brefused\b/i;
+
+function resultText(result: unknown): string {
+	const content = record(result).content;
+	if (!Array.isArray(content)) return "";
+	return content.map(block => typeof record(block).text === "string" ? String(record(block).text) : "").join("\n");
+}
+
+function shellExitCode(result: unknown): number | undefined {
+	const value = record(result);
+	for (const candidate of [record(value.details).exitCode, value.exitCode]) {
+		if (typeof candidate === "number") return candidate;
+	}
+	return undefined;
+}
+
+/**
+ * Decide si un fallo merece el bloque nativo en Focus. Los shells solo pasan el
+ * filtro cuando el fallo pide atención; `read`, `edit` y el resto siguen visibles
+ * porque un fallo ahí suele cambiar lo que hace el agente.
+ */
+export function seriousToolFailure(name: string, result: unknown): boolean {
+	if (!toolHasError(result)) return false;
+	if (name !== "bash" && name !== "powershell") return true;
+	const exit = shellExitCode(result);
+	// 126: no ejecutable, 127: comando inexistente, 137: matado por señal.
+	if (exit === 126 || exit === 127 || exit === 137) return true;
+	return SERIOUS_SHELL_ERROR.test(resultText(result));
+}
+
 export function hasAssistantError(message: unknown): boolean {
 	return ["error", "aborted", "length"].includes(String(record(message).stopReason));
 }

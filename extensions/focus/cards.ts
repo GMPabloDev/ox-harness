@@ -16,8 +16,13 @@ import { cleanLine, record } from "./policy.ts";
 // Use exact palette colors, not interpolated shades. Named ox roles stay
 // distinct; other agents get a stable theme token from their name.
 const AGENT_COLORS: Record<string, ThemeColor> = {
+	"ox-code-auditor": "accent",
+	"ox-committer": "customMessageLabel",
 	"ox-explore": "toolDiffAdded",
 	"ox-researcher": "mdLink",
+	"ox-spec-auditor": "syntaxFunction",
+	"ox-spec-exec": "syntaxNumber",
+	"ox-spec-fix": "warning",
 };
 const AGENT_PALETTE: ThemeColor[] = ["accent", "toolDiffAdded", "mdLink", "syntaxType", "customMessageLabel", "syntaxFunction"];
 export const MEMORY_COLOR: ThemeColor = "mdCode";
@@ -40,12 +45,15 @@ export interface AgentRun {
 	model?: string;
 	thinking?: string;
 	windowTokens?: number;
+	contextLimit?: number;
 	outputTokens?: number;
 	costUsd?: number;
 	startedAt?: number;
 	endedAt?: number;
+	durationMs?: number;
 	toolCount?: number;
 	activity?: { tool: string; detail: string };
+	dependsOn?: string;
 }
 
 // Only tools whose argument is useful to see and safe to echo. Memory writes
@@ -91,8 +99,8 @@ function runsFromStatus(file: Record<string, unknown> | undefined, input: Record
 	if (!file) return [];
 	const steps = Array.isArray(file.steps) ? file.steps.map(record) : [];
 	if (!steps.length) return [];
-	const totalTokens = record(file.totalTokens);
-	const tasks = Array.isArray(input.tasks) ? input.tasks.map(record) : [];
+	const rawTasks = Array.isArray(input.tasks) ? input.tasks : record(input.args).tasks;
+	const tasks = Array.isArray(rawTasks) ? rawTasks.map(record) : []; 
 	return steps.map((step, index) => {
 		const tokens = record(step.tokens);
 		const cost = record(step.totalCost);
@@ -104,15 +112,17 @@ function runsFromStatus(file: Record<string, unknown> | undefined, input: Record
 			agent: text(step.agent, 40) || text(input.agent, 40) || "subagente",
 			// status.json redacts step descriptions. The launch arguments in the
 			// transcript hold the real task, so prefer them and drop the placeholder.
-			task: text(tasks[index]?.task, 160) || text(input.task, 160) || withoutRedaction(text(step.description, 160)),
+			task: text(tasks[index]?.task, 160) || text(input.task, 160) || withoutRedaction(text(step.description, 160)) || withoutRedaction(text(step.label, 160)),
 			state: text(step.status, 16) || text(file.state, 16),
 			model: text(step.model, 64) || undefined,
 			thinking: text(step.thinking, 12) || undefined,
-			windowTokens: number(tokens.window) ?? number(totalTokens.window),
+			windowTokens: number(tokens.window),
+			contextLimit: number(step.contextLimit),
 			outputTokens: number(tokens.output),
 			costUsd: number(cost.costUsd),
-			startedAt: number(step.startedAt) ?? number(file.startedAt),
-			endedAt: number(step.endedAt) ?? number(file.endedAt) ?? number(file.lastUpdate),
+			startedAt: number(step.startedAt),
+			endedAt: number(step.endedAt),
+			durationMs: number(step.durationMs),
 			toolCount: number(step.toolCount),
 			activity: tool ? { tool, detail } : undefined,
 		};
@@ -174,6 +184,8 @@ function stateLabel(state: string): StateLabel {
 		case "blocked": return { icon: "✗", label: "bloqueado", color: "error" };
 		case "stopped": return { icon: "■", label: "detenido", color: "warning" };
 		case "paused": return { icon: "‖", label: "en pausa", color: "warning" };
+		case "pending": return { icon: "○", label: "pendiente", color: "dim" };
+		case "unknown": return { icon: "○", label: "estado desconocido", color: "dim" };
 		case "detached": return { icon: "◐", label: "en segundo plano", color: "accent" };
 		case "running": case "active": case "launching": return { icon: "◐", label: "en marcha", color: "accent" };
 		default: return { icon: "◐", label: state ? state : "en marcha", color: "accent" };
@@ -190,19 +202,14 @@ interface Part {
 	bold?: boolean;
 }
 
-const RAIL = "▌";
-const CARD_PADDING = 2;
-const CARD_CHROME = 1 + CARD_PADDING * 2;
+const CARD_CHROME = 4;
 const MIN_CARD_WIDTH = 24;
 
 const stripAnsi = (value: string) => value.replace(/\x1b\[[0-9;]*m/g, "");
 
-const partsWidth = (parts: Part[]) => parts.reduce((total, part) => total + visibleWidth(part.text), 0);
-
 function cardLine(theme: Theme, accent: ThemeColor | Color, parts: Part[], width: number): string {
-	const background = theme.colors.customMessageBg;
 	const paint = (value: string, style: { fg?: ThemeColor | Color; bold?: boolean }) =>
-		value ? theme.style(value, { bg: background, ...style }) : "";
+		value ? theme.style(value, style) : "";
 	const inner = Math.max(1, width - CARD_CHROME);
 	// Clip each part before styling: truncating an already painted string would
 	// reset the card background on the ellipsis and leave a gap in the band.
@@ -214,40 +221,102 @@ function cardLine(theme: Theme, accent: ThemeColor | Color, parts: Part[], width
 		body += paint(clipped, part);
 		budget -= visibleWidth(clipped);
 	}
-	return paint(RAIL, { fg: accent, bold: true }) + paint(" ".repeat(CARD_PADDING), {}) + body +
-		paint(" ".repeat(Math.max(0, budget) + CARD_PADDING), {});
+	return paint("│", { fg: accent }) + " " + body + " ".repeat(Math.max(0, budget) + 1) + paint("│", { fg: accent });
 }
 
-function metaParts(run: AgentRun): Part[] {
-	const pieces: string[] = [];
+const CONTEXT_BAR_CELLS = 8;
+const CONTEXT_BAR_FILLED = "▮";
+const CONTEXT_BAR_EMPTY = "▯";
+
+/** Barra proporcional de ocho celdas; con algo de uso, la primera celda siempre se llena. */
+function contextBar(percentage: number): string {
+	const raw = Math.round((percentage / 100) * CONTEXT_BAR_CELLS);
+	const filled = Math.min(CONTEXT_BAR_CELLS, percentage > 0 ? Math.max(1, raw) : 0);
+	return CONTEXT_BAR_FILLED.repeat(filled) + CONTEXT_BAR_EMPTY.repeat(CONTEXT_BAR_CELLS - filled);
+}
+
+/** Un porcentaje que redondea a 0 se lee mejor como `<1%` que como `0%` con una celda llena. */
+function percentLabel(percentage: number): string {
+	return percentage > 0 && percentage < 1 ? "<1%" : `${Math.round(percentage)}%`;
+}
+
+function metaParts(run: AgentRun, accent: ThemeColor | Color): Part[] {
+	const groups: Part[][] = [];
 	// The provider prefix adds noise; the model id is what identifies the run.
-	if (run.model) pieces.push(truncateToWidth(run.model.split("/").at(-1) ?? run.model, 24));
-	if (run.thinking) pieces.push(run.thinking);
-	if (run.windowTokens) pieces.push(`ctx ${count(run.windowTokens)}`);
-	if (run.outputTokens) pieces.push(`out ${count(run.outputTokens)}`);
-	if (run.costUsd) pieces.push(money(run.costUsd));
-	if (run.toolCount) pieces.push(`${run.toolCount} tools`);
-	return pieces.length ? [{ text: pieces.join(" · "), fg: "dim" }] : [];
+	if (run.model) groups.push([{ text: truncateToWidth(run.model.split("/").at(-1) ?? run.model, 24), fg: "dim" }]);
+	if (run.thinking) groups.push([{ text: run.thinking, fg: "dim" }]);
+	const window = run.windowTokens;
+	const limit = run.contextLimit;
+	const percentage = window !== undefined && window >= 0 && limit !== undefined && limit > 0
+		? window / limit * 100 : undefined;
+	if (percentage !== undefined) {
+		groups.push([
+			{ text: "ctx ", fg: "dim" },
+			{ text: contextBar(percentage), fg: accent },
+			{ text: " " + percentLabel(percentage), fg: "dim" },
+		]);
+	} else if (window !== undefined && window >= 0) {
+		groups.push([{ text: `ctx ${count(window)} (% desconocido)`, fg: "dim" }]);
+	} else {
+		groups.push([{ text: "ctx % desconocido", fg: "dim" }]);
+	}
+	if (run.outputTokens) groups.push([{ text: `out ${count(run.outputTokens)}`, fg: "dim" }]);
+	if (run.costUsd !== undefined) groups.push([{ text: money(run.costUsd), fg: "dim" }]);
+	if (run.toolCount) groups.push([{ text: `${run.toolCount} tools`, fg: "dim" }]);
+	const parts: Part[] = [];
+	for (const group of groups) {
+		if (parts.length) parts.push({ text: " · ", fg: "dim" });
+		parts.push(...group);
+	}
+	return parts;
 }
 
 function runtime(run: AgentRun, now: number): string {
+	if (run.durationMs !== undefined && run.durationMs >= 0) return elapsed(run.durationMs);
 	const end = run.endedAt && !isActive(run.state) ? run.endedAt : now;
 	if (!run.startedAt) return "";
 	return elapsed(Math.max(0, end - run.startedAt));
 }
 
 /** Card lines for one tool call: one card per agent, colored and stable. */
-export function subagentCards(inputValue: unknown, resultValue: unknown, width: number, theme: Theme, options: { pending?: boolean; now?: number } = {}): { lines: string[]; running: boolean } {
+export function subagentCards(inputValue: unknown, resultValue: unknown, width: number, theme: Theme, options: { pending?: boolean; now?: number; toolCallId?: string } = {}): { lines: string[]; running: boolean } {
 	const input = record(inputValue);
 	const details = record(record(resultValue).details);
 	const asyncDir = typeof details.asyncDir === "string" ? details.asyncDir : "";
-	let runs = asyncDir ? runsFromStatus(readStatus(asyncDir), input) : [];
-	if (!runs.length) runs = runsFromResults(details, input);
+	const summary = record(details.workflowChildren);
+	const correlated = details.mode === "workflow" && summary.version === 1 && !!options.toolCallId && summary.parentToolCallId === options.toolCallId && typeof details.runId === "string" && summary.workflowRunId === details.runId && Array.isArray(summary.children);
+	let runs: AgentRun[] = correlated ? (summary.children as unknown[]).map(record).map(child => {
+		const activity = record(child.activity);
+		const tool = text(activity.currentTool, 24);
+		const state = text(child.state, 16);
+		return { agent: text(child.agent, 40) || "subagente", task: "", state: ["running", "completed", "complete", "failed", "error", "blocked", "stopped", "paused", "pending"].includes(state) ? state : "unknown", model: text(child.model, 64) || undefined, thinking: text(child.thinking, 12) || undefined, durationMs: number(activity.durationMs), activity: tool ? { tool, detail: "" } : undefined };
+	}) : asyncDir ? runsFromStatus(readStatus(asyncDir), input) : [];
+	if (!runs.length && !correlated) runs = runsFromResults(details, input);
+	if (!runs.length) {
+		const chain = Array.isArray(input.chain) ? input.chain : record(input.args).chain;
+		if (Array.isArray(chain)) {
+			let previous: string[] = [];
+			for (const raw of chain) {
+				const step = record(raw);
+				const children = Array.isArray(step.parallel) ? step.parallel.map(record) : [step];
+				const current = children.map(child => text(child.agent, 40) || "subagente");
+				for (const [index, child] of children.entries()) runs.push({ agent: current[index], task: text(child.task, 160), state: options.pending === false ? "unknown" : "pending", dependsOn: previous.join(", ") || undefined });
+				previous = current;
+			}
+		}
+	}
+	if (!runs.length) {
+		const rawTasks = Array.isArray(input.tasks) ? input.tasks : record(input.args).tasks;
+		if (Array.isArray(rawTasks) && rawTasks.length) runs = rawTasks.map(raw => {
+			const task = record(raw);
+			return { agent: text(task.agent, 40) || "subagente", task: text(task.task, 160), state: options.pending === false ? "unknown" : "pending" };
+		});
+	}
 	if (!runs.length) {
 		runs = [{
 			agent: text(input.agent, 40) || "subagente",
 			task: text(input.task, 160),
-			state: options.pending === false ? "completed" : "running",
+			state: options.pending === false ? "unknown" : "pending",
 		}];
 	}
 	const now = options.now ?? Date.now();
@@ -261,37 +330,33 @@ export function subagentCards(inputValue: unknown, resultValue: unknown, width: 
 			{ text: " · " + state.label, fg: state.color },
 		];
 		if (time) title.push({ text: " · " + time, fg: "dim" });
-		const meta = metaParts(run);
-		const gap = width - CARD_CHROME - partsWidth(title) - partsWidth(meta);
-		return { run, accent, state, title, meta, gap };
+		const meta = metaParts(run, accent);
+		return { run, accent, state, title, meta };
 	});
-	// One layout per block: either every card right-aligns its numbers on the
-	// header or every card keeps them on a separate line. Mixing both looks broken.
-	const inline = prepared.every(card => !card.meta.length || card.gap >= 2);
 	const lines: string[] = [];
 	let running = false;
-	for (const { run, accent, state, title, meta, gap } of prepared) {
+	for (const { run, accent, state, title, meta } of prepared) {
 		if (isActive(run.state)) running = true;
 		if (width < MIN_CARD_WIDTH) {
 			const flat = `${state.icon} ${run.agent} · ${state.label}${run.model ? " · " + run.model : ""}`;
 			lines.push("", truncateToWidth(flat, Math.max(1, width)));
 			continue;
 		}
-		lines.push("", cardLine(theme, accent, [], width));
-		if (inline && meta.length) {
-			lines.push(cardLine(theme, accent, [...title, { text: " ".repeat(gap) }, ...meta], width));
-		} else {
-			lines.push(cardLine(theme, accent, title, width));
-			if (meta.length) lines.push(cardLine(theme, accent, meta, width));
-		}
+		const heading = title.map(part => theme.style(part.text, part)).join("");
+		const available = width - 5;
+		const clipped = truncateToWidth(heading, available);
+		const border = (text: string) => theme.style(text, { fg: accent });
+		lines.push("", border("╭─ ") + clipped + border(" " + "─".repeat(Math.max(0, available - visibleWidth(clipped))) + "╮"));
 		if (run.task) lines.push(cardLine(theme, accent, [{ text: run.task, fg: "muted" }], width));
+		if (run.dependsOn) lines.push(cardLine(theme, accent, [{ text: "depende de " + run.dependsOn, fg: "dim" }], width));
 		if (run.activity) {
 			const activity: Part[] = [{ text: WEB_TOOLS.has(run.activity.tool) ? "🌐 " : "↳ ", fg: "dim" },
 				{ text: run.activity.tool, fg: accent, bold: true }];
 			if (run.activity.detail) activity.push({ text: " · " + run.activity.detail, fg: "muted" });
 			lines.push(cardLine(theme, accent, activity, width));
 		}
-		lines.push(cardLine(theme, accent, [], width));
+		if (meta.length) lines.push(cardLine(theme, accent, meta, width));
+		lines.push(border("╰" + "─".repeat(width - 2) + "╯"));
 	}
 	return { lines, running };
 }
